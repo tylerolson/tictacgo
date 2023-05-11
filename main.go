@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -18,59 +19,19 @@ type model struct {
 	isXTurn bool
 }
 
-func updateSquare(m *model, num string) {
+func updateSquare(m *model, numStr string) {
 	move := "O"
 	if m.isXTurn {
 		move = "X"
 	}
 
 	r := m.board.Rows()
-	switch num {
-	case "1":
-		if r[0][0] == "1" {
-			r[0][0] = move
-			m.isXTurn = !m.isXTurn
-		}
-	case "2":
-		if r[0][1] == "2" {
-			r[0][1] = move
-			m.isXTurn = !m.isXTurn
-		}
-	case "3":
-		if r[0][2] == "3" {
-			r[0][2] = move
-			m.isXTurn = !m.isXTurn
-		}
-	case "4":
-		if r[1][0] == "4" {
-			r[1][0] = move
-			m.isXTurn = !m.isXTurn
-		}
-	case "5":
-		if r[1][1] == "5" {
-			r[1][1] = move
-			m.isXTurn = !m.isXTurn
-		}
-	case "6":
-		if r[1][2] == "6" {
-			r[1][2] = move
-			m.isXTurn = !m.isXTurn
-		}
-	case "7":
-		if r[2][0] == "7" {
-			r[2][0] = move
-			m.isXTurn = !m.isXTurn
-		}
-	case "8":
-		if r[2][1] == "8" {
-			r[2][1] = move
-			m.isXTurn = !m.isXTurn
-		}
-	case "9":
-		if r[2][2] == "9" {
-			r[2][2] = move
-			m.isXTurn = !m.isXTurn
-		}
+	num, _ := strconv.Atoi(numStr)
+	num--
+
+	if r[num/3][num%3] == numStr {
+		r[num/3][num%3] = move
+		m.isXTurn = !m.isXTurn
 	}
 
 	m.board.SetRows(r)
@@ -107,7 +68,7 @@ func (m model) View() string {
 	return "oops"
 }
 
-// sub update
+// sub updates
 
 func (m model) UpdateMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -151,7 +112,7 @@ func (m model) UpdateGame(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-//sub view
+//sub views
 
 func (m model) ViewMenu() string {
 	s := strings.Builder{}
