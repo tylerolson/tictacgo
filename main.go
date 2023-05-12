@@ -14,10 +14,16 @@ type Game struct {
 	board  []string
 	turn   string
 	winner string
+	moves  int
 }
 
 func (g *Game) checkWinner() bool {
 	// horizontal
+
+	if g.moves >= 9 {
+		g.winner = "tie"
+		return true
+	}
 
 	if g.board[0] == g.board[1] && g.board[1] == g.board[2] {
 		g.winner = g.board[0]
@@ -80,6 +86,14 @@ func (g *Game) move(cell string) bool {
 		return false
 	}
 
+	if g.turn == "X" {
+		g.turn = "O"
+	} else {
+		g.turn = "X"
+	}
+
+	g.moves++
+
 	return true
 }
 
@@ -88,6 +102,7 @@ func newGame() Game {
 		board:  []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"},
 		turn:   "X",
 		winner: "",
+		moves:  0,
 	}
 
 	return *game
@@ -174,20 +189,12 @@ func (m model) UpdateGame(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			r := m.board.Rows()
-			num, _ := strconv.Atoi(msg.String())
-			num--
 
-			if r[num/3][num%3] == msg.String() {
-				r[num/3][num%3] = m.game.turn
+			for i := 0; i < 9; i++ {
+				r[i/3][i%3] = m.game.board[i]
 			}
 
 			m.board.SetRows(r)
-
-			if m.game.turn == "X" {
-				m.game.turn = "O"
-			} else {
-				m.game.turn = "X"
-			}
 
 			return m, nil
 		}
@@ -224,9 +231,13 @@ func (m model) ViewGame() string {
 	)
 
 	if m.game.checkWinner() {
-		s.WriteString("\n\n")
-		s.WriteString(m.game.winner)
-		s.WriteString(" wins!")
+		if m.game.winner == "tie" {
+			s.WriteString("\n\nIt is a tie!")
+		} else {
+			s.WriteString("\n\n")
+			s.WriteString(m.game.winner)
+			s.WriteString(" wins!")
+		}
 	} else {
 		s.WriteString("\n\n It is ")
 		s.WriteString(m.game.turn)
