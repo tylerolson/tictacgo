@@ -10,31 +10,96 @@ import (
 	"strings"
 )
 
+type Game struct {
+	board  []string
+	turn   string
+	winner string
+}
+
+func (g *Game) checkWinner() bool {
+	// horizontal
+
+	if g.board[0] == g.board[1] && g.board[1] == g.board[2] {
+		g.winner = g.board[0]
+		return true
+	}
+
+	if g.board[3] == g.board[4] && g.board[4] == g.board[5] {
+		g.winner = g.board[3]
+		return true
+	}
+
+	if g.board[6] == g.board[7] && g.board[7] == g.board[8] {
+		g.winner = g.board[6]
+		return true
+	}
+
+	//vertical
+
+	if g.board[0] == g.board[3] && g.board[3] == g.board[6] {
+		g.winner = g.board[0]
+		return true
+	}
+
+	if g.board[1] == g.board[4] && g.board[4] == g.board[7] {
+		g.winner = g.board[1]
+		return true
+	}
+
+	if g.board[2] == g.board[5] && g.board[5] == g.board[8] {
+		g.winner = g.board[2]
+		return true
+	}
+
+	//diagonal
+
+	if g.board[0] == g.board[4] && g.board[5] == g.board[8] {
+		g.winner = g.board[0]
+		return true
+	}
+
+	if g.board[2] == g.board[4] && g.board[5] == g.board[6] {
+		g.winner = g.board[2]
+		return true
+	}
+
+	return false
+}
+
+func (g *Game) move(cell string) bool {
+	if g.checkWinner() {
+		return false //throw err maybe?
+	}
+
+	cellInt, _ := strconv.Atoi(cell)
+	cellInt--
+
+	if g.board[cellInt] == cell {
+		g.board[cellInt] = g.turn
+	} else {
+		return false
+	}
+
+	return true
+}
+
+func newGame() Game {
+	game := &Game{
+		board:  []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"},
+		turn:   "X",
+		winner: "",
+	}
+
+	return *game
+}
+
 type model struct {
 	state   string
 	choices []string
 	cursor  int
 
-	board   table.Model
-	isXTurn bool
-}
-
-func updateSquare(m *model, numStr string) {
-	move := "O"
-	if m.isXTurn {
-		move = "X"
-	}
-
-	r := m.board.Rows()
-	num, _ := strconv.Atoi(numStr)
-	num--
-
-	if r[num/3][num%3] == numStr {
-		r[num/3][num%3] = move
-		m.isXTurn = !m.isXTurn
-	}
-
-	m.board.SetRows(r)
+	game  Game
+	board table.Model
 }
 
 func (m model) Init() tea.Cmd {
@@ -104,7 +169,26 @@ func (m model) UpdateGame(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "1", "2", "3", "4", "5", "6", "7", "8", "9":
-			updateSquare(&m, msg.String())
+			if !m.game.move(msg.String()) {
+				return m, nil
+			}
+
+			r := m.board.Rows()
+			num, _ := strconv.Atoi(msg.String())
+			num--
+
+			if r[num/3][num%3] == msg.String() {
+				r[num/3][num%3] = m.game.turn
+			}
+
+			m.board.SetRows(r)
+
+			if m.game.turn == "X" {
+				m.game.turn = "O"
+			} else {
+				m.game.turn = "X"
+			}
+
 			return m, nil
 		}
 	}
@@ -139,11 +223,14 @@ func (m model) ViewGame() string {
 		lipgloss.NewStyle().PaddingLeft(7).Render(m.board.View()),
 	)
 
-	if m.isXTurn {
-		s.WriteString("\n\n It is X's turn!")
+	if m.game.checkWinner() {
+		s.WriteString("\n\n")
+		s.WriteString(m.game.winner)
+		s.WriteString(" wins!")
 	} else {
-		s.WriteString("\n\n It is O's turn!")
-
+		s.WriteString("\n\n It is ")
+		s.WriteString(m.game.turn)
+		s.WriteString("'s turn")
 	}
 
 	return s.String()
@@ -168,6 +255,8 @@ func main() {
 		table.WithHeight(10),
 	)
 
+	g := newGame()
+
 	s := table.DefaultStyles()
 	s.Selected = lipgloss.NewStyle()
 	s.Header = lipgloss.NewStyle()
@@ -179,9 +268,10 @@ func main() {
 		state:   "menu",
 		choices: []string{"Start", "Exit"},
 		cursor:  0,
+		game:    g,
 		board:   t,
-		isXTurn: true,
 	}
+
 	p := tea.NewProgram(initialModel)
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Alas, there's been an error: %v", err)
