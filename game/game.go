@@ -78,12 +78,12 @@ func (g *TicTacGo) CheckWinner() bool {
 
 	//diagonal
 
-	if g.board[0] == g.board[4] && g.board[5] == g.board[8] {
+	if g.board[0] == g.board[4] && g.board[4] == g.board[8] {
 		g.winner = g.board[0]
 		return true
 	}
 
-	if g.board[2] == g.board[4] && g.board[5] == g.board[6] {
+	if g.board[2] == g.board[4] && g.board[4] == g.board[6] {
 		g.winner = g.board[2]
 		return true
 	}

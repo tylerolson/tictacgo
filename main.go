@@ -2,6 +2,9 @@ package main
 
 import (
 	"fmt"
+	"github.com/charmbracelet/bubbles/help"
+	_ "github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -11,12 +14,15 @@ import (
 )
 
 type model struct {
-	state   string
-	choices []string
-	cursor  int
+	state    string
+	choices  []string
+	cursor   int
+	menuHelp help.Model
+	menuKeys menuKeyMap
 
 	game       game.TicTacGo
 	boardTable table.Model
+	gameKeys   gameKeyMap
 }
 
 func (m model) Init() tea.Cmd {
@@ -56,18 +62,18 @@ func (m model) UpdateMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "up", "k":
+		switch {
+		case key.Matches(msg, m.menuKeys.Up):
 			if m.cursor > 0 {
 				m.cursor--
 			}
 
-		case "down", "j":
+		case key.Matches(msg, m.menuKeys.Down):
 			if m.cursor < len(m.choices)-1 {
 				m.cursor++
 			}
 
-		case "enter", " ":
+		case key.Matches(msg, m.menuKeys.Enter):
 			if m.cursor == 0 {
 				m.state = "game"
 				return m, nil
@@ -109,28 +115,31 @@ func (m model) UpdateGame(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) ViewMenu() string {
 	s := strings.Builder{}
+	s.WriteString("\n")
 
 	for i, choice := range m.choices {
 		cursor := " " // no cursor
 		if m.cursor == i {
-			cursor = ">" // cursor!
+			cursor = "> " // cursor!
 		}
-		s.WriteString("      ")
 		s.WriteString(cursor)
 		s.WriteString(choice)
 		s.WriteString("\n")
 	}
 
-	return s.String()
+	s.WriteString("\n")
+	s.WriteString(help.New().View(m.menuKeys))
+	s.WriteString("\n")
 
+	var marginStyle = lipgloss.NewStyle().MarginLeft(10)
+
+	return marginStyle.Render(s.String())
 }
 
 func (m model) ViewGame() string {
 	s := strings.Builder{}
 
-	s.WriteString(
-		lipgloss.NewStyle().PaddingLeft(7).Render(m.boardTable.View()),
-	)
+	s.WriteString(m.boardTable.View())
 
 	if m.game.CheckWinner() {
 		if m.game.GetWinner() == "tie" {
@@ -141,13 +150,20 @@ func (m model) ViewGame() string {
 			s.WriteString(" wins!")
 		}
 	} else {
-		s.WriteString("\n\n It is ")
-		s.WriteString(m.game.GetWinner())
+		s.WriteString("\n\nIt is ")
+		s.WriteString(m.game.GetTurn())
 		s.WriteString("'s turn")
 	}
 
-	return s.String()
+	s.WriteString("\n")
 
+	s.WriteString("\n")
+	s.WriteString(help.New().View(m.gameKeys))
+	s.WriteString("\n")
+
+	var marginStyle = lipgloss.NewStyle().MarginLeft(10)
+
+	return marginStyle.Render(s.String())
 }
 
 func main() {
@@ -181,8 +197,10 @@ func main() {
 		state:      "menu",
 		choices:    []string{"Start", "Exit"},
 		cursor:     0,
+		menuKeys:   menuKeys,
 		game:       g,
 		boardTable: t,
+		gameKeys:   gameKeys,
 	}
 
 	p := tea.NewProgram(initialModel)
