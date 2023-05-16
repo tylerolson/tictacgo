@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/gob"
 	"fmt"
 	"github.com/charmbracelet/bubbles/help"
 	_ "github.com/charmbracelet/bubbles/help"
@@ -9,6 +10,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/tylerolson/tictacgo/game"
+	"log"
+	"net"
 	"os"
 	"strings"
 )
@@ -78,6 +81,12 @@ func (m model) UpdateMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.state = "game"
 				return m, nil
 			} else if m.cursor == 1 {
+				msg := game.Message{Request: game.CREATE_ROOM, RoomName: "yo"}
+				sendRequest(msg)
+			} else if m.cursor == 2 {
+				msg := game.Message{Request: game.JOIN_ROOM, RoomName: "yo"}
+				sendRequest(msg)
+			} else if m.cursor == 3 {
 				return m, tea.Quit
 			}
 		}
@@ -166,6 +175,24 @@ func (m model) ViewGame() string {
 	return marginStyle.Render(s.String())
 }
 
+func sendRequest(message game.Message) {
+	conn, err := net.Dial("tcp", ":8080")
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	encoder := gob.NewEncoder(conn)
+	err = encoder.Encode(message)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	err = conn.Close()
+	if err != nil {
+		log.Fatalln(err)
+	}
+}
+
 func main() {
 	columns := []table.Column{
 		{Title: "", Width: 3},
@@ -195,7 +222,7 @@ func main() {
 
 	initialModel := model{
 		state:      "menu",
-		choices:    []string{"Start", "Exit"},
+		choices:    []string{"Start Solo", "Create Room", "Join Room", "Exit"},
 		cursor:     0,
 		menuKeys:   menuKeys,
 		game:       g,
