@@ -1,16 +1,19 @@
-package game
+package tictacgo
 
-import "strconv"
+import (
+	"fmt"
+	"strconv"
+)
 
-type TicTacGo struct {
+type Game struct {
 	board  []string
 	turn   string
 	winner string
 	moves  int
 }
 
-func NewGame() TicTacGo {
-	g := &TicTacGo{
+func NewGame() Game {
+	g := &Game{
 		board:  []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"},
 		turn:   "X",
 		winner: "",
@@ -20,23 +23,31 @@ func NewGame() TicTacGo {
 	return *g
 }
 
-func (g *TicTacGo) GetBoard() []string {
+func (g *Game) GetBoard() []string {
 	return g.board
 }
 
-func (g *TicTacGo) GetTurn() string {
+func (g *Game) GetTurn() string {
 	return g.turn
 }
 
-func (g *TicTacGo) GetWinner() string {
+func (g *Game) GetWinner() string {
 	return g.winner
 }
 
-func (g *TicTacGo) GetMoves() int {
+func (g *Game) GetMoves() int {
 	return g.moves
 }
 
-func (g *TicTacGo) CheckWinner() bool {
+func (g *Game) HasWinner() bool {
+	return g.winner != ""
+}
+
+func (g *Game) SetCell(cell int, value string) {
+	g.board[cell] = value
+}
+
+func (g *Game) CheckWinner() bool {
 	// horizontal
 
 	if g.moves >= 9 {
@@ -91,7 +102,7 @@ func (g *TicTacGo) CheckWinner() bool {
 	return false
 }
 
-func (g *TicTacGo) Move(cell string) bool {
+func (g *Game) Move(cell string) bool {
 	if g.CheckWinner() {
 		return false //throw err maybe?
 	}
@@ -114,4 +125,13 @@ func (g *TicTacGo) Move(cell string) bool {
 	g.moves++
 
 	return true
+}
+
+func (g *Game) Print() {
+	for i := 0; i < 9; i++ {
+		fmt.Print(g.board[i] + " ")
+		if (i+1)%3 == 0 {
+			fmt.Print("\n")
+		}
+	}
 }

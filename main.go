@@ -1,17 +1,13 @@
 package main
 
 import (
-	"encoding/gob"
 	"fmt"
 	"github.com/charmbracelet/bubbles/help"
-	_ "github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/tylerolson/tictacgo/game"
-	"log"
-	"net"
+	"github.com/tylerolson/tictacgo/tictacgo"
 	"os"
 	"strings"
 )
@@ -23,7 +19,7 @@ type model struct {
 	menuHelp help.Model
 	menuKeys menuKeyMap
 
-	game       game.TicTacGo
+	game       tictacgo.Game
 	boardTable table.Model
 	gameKeys   gameKeyMap
 }
@@ -63,7 +59,6 @@ func (m model) View() string {
 
 func (m model) UpdateMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, m.menuKeys.Up):
@@ -81,11 +76,11 @@ func (m model) UpdateMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.state = "game"
 				return m, nil
 			} else if m.cursor == 1 {
-				msg := game.Message{Request: game.CREATE_ROOM, RoomName: "yo"}
-				sendRequest(msg)
+				m.state = "game"
+				return m, nil
 			} else if m.cursor == 2 {
-				msg := game.Message{Request: game.JOIN_ROOM, RoomName: "yo"}
-				sendRequest(msg)
+				m.state = "game"
+				return m, nil
 			} else if m.cursor == 3 {
 				return m, tea.Quit
 			}
@@ -97,7 +92,6 @@ func (m model) UpdateMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) UpdateGame(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "1", "2", "3", "4", "5", "6", "7", "8", "9":
@@ -150,6 +144,8 @@ func (m model) ViewGame() string {
 
 	s.WriteString(m.boardTable.View())
 
+	s.WriteString("\n\n")
+
 	if m.game.CheckWinner() {
 		if m.game.GetWinner() == "tie" {
 			s.WriteString("\n\nIt is a tie!")
@@ -159,7 +155,7 @@ func (m model) ViewGame() string {
 			s.WriteString(" wins!")
 		}
 	} else {
-		s.WriteString("\n\nIt is ")
+		s.WriteString("It is ")
 		s.WriteString(m.game.GetTurn())
 		s.WriteString("'s turn")
 	}
@@ -173,24 +169,6 @@ func (m model) ViewGame() string {
 	var marginStyle = lipgloss.NewStyle().MarginLeft(10)
 
 	return marginStyle.Render(s.String())
-}
-
-func sendRequest(message game.Message) {
-	conn, err := net.Dial("tcp", ":8080")
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	encoder := gob.NewEncoder(conn)
-	err = encoder.Encode(message)
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	err = conn.Close()
-	if err != nil {
-		log.Fatalln(err)
-	}
 }
 
 func main() {
@@ -211,7 +189,7 @@ func main() {
 		table.WithHeight(10),
 	)
 
-	g := game.NewGame()
+	g := tictacgo.NewGame()
 
 	s := table.DefaultStyles()
 	s.Selected = lipgloss.NewStyle()
