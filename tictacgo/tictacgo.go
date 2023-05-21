@@ -12,15 +12,13 @@ type Game struct {
 	moves  int
 }
 
-func NewGame() Game {
-	g := Game{
+func NewGame() *Game {
+	return &Game{
 		board:  []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"},
 		turn:   "X",
 		winner: "",
 		moves:  0,
 	}
-
-	return g
 }
 
 func (g *Game) GetBoard() []string {
@@ -49,6 +47,10 @@ func (g *Game) SetCell(cell int, value string) {
 
 func (g *Game) SetTurn(turn string) {
 	g.turn = turn
+}
+
+func (g *Game) SetWinner(winner string) {
+	g.winner = winner
 }
 
 func (g *Game) CheckWinner() bool {

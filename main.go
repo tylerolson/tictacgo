@@ -19,9 +19,11 @@ type model struct {
 	menuHelp help.Model
 	menuKeys menuKeyMap
 
-	game       tictacgo.Game
-	boardTable table.Model
-	gameKeys   gameKeyMap
+	isMultiplayer bool
+	game          *tictacgo.Game
+	boardTable    table.Model
+	gameKeys      gameKeyMap
+	client        *tictacgo.Client
 }
 
 func (m model) Init() tea.Cmd {
@@ -77,9 +79,19 @@ func (m model) UpdateMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			} else if m.cursor == 1 {
 				m.state = "game"
+				m.isMultiplayer = true
+				m.client = tictacgo.NewClient()
+				m.client.SetPlayer("X")
+				m.client.EstablishConnection("localhost:8080")
+				m.client.CreateRoom("yo")
 				return m, nil
 			} else if m.cursor == 2 {
 				m.state = "game"
+				m.isMultiplayer = true
+				m.client = tictacgo.NewClient()
+				m.client.SetPlayer("O")
+				m.client.EstablishConnection("localhost:8080")
+				m.client.JoinRoom("yo")
 				return m, nil
 			} else if m.cursor == 3 {
 				return m, tea.Quit
@@ -95,14 +107,21 @@ func (m model) UpdateGame(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "1", "2", "3", "4", "5", "6", "7", "8", "9":
-			if !m.game.Move(msg.String()) {
-				return m, nil
+			g := m.game
+			if m.isMultiplayer {
+				m.client.MakeMove(msg.String())
+				g = m.client.GetGame()
+				m.game.SetTurn(m.client.GetGame().GetTurn())
+			} else {
+				if !m.game.Move(msg.String()) {
+					return m, nil
+				}
 			}
 
 			r := m.boardTable.Rows()
 
 			for i := 0; i < 9; i++ {
-				r[i/3][i%3] = m.game.GetBoard()[i]
+				r[i/3][i%3] = g.GetBoard()[i]
 			}
 
 			m.boardTable.SetRows(r)

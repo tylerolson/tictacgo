@@ -2,13 +2,21 @@ package main
 
 import (
 	"fmt"
-	"github.com/tylerolson/tictacgo/client"
+	"github.com/tylerolson/tictacgo/tictacgo"
 	"log"
 	"time"
 )
 
 func main() {
-	c := client.NewClient("X")
+	fmt.Println("Pick a player to be (X/O)")
+	playerChoice := ""
+	_, err := fmt.Scanln(&playerChoice)
+	if err != nil {
+		return
+	}
+
+	c := tictacgo.NewClient()
+	c.SetPlayer(playerChoice)
 	c.EstablishConnection("localhost:8080")
 	c.CreateRoom("yo")
 
