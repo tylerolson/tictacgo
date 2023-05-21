@@ -12,20 +12,19 @@ func main() {
 	c.EstablishConnection("localhost:8080")
 	c.CreateRoom("yo")
 
-	g := c.GetGame()
-	g.Print()
+	game := c.GetGame()
 
-	for !g.HasWinner() {
+	for !game.HasWinner() {
+		game.Print()
 		fmt.Println("make a move")
+		fmt.Println("current move is " + game.GetTurn())
 		cell := ""
 		_, err := fmt.Scanln(&cell)
 		if err != nil {
 			log.Fatalln(err)
 		}
 		c.MakeMove(cell)
-		g = c.GetGame()
 
 		time.Sleep(50 * time.Millisecond)
-		g.Print()
 	}
 }

@@ -13,14 +13,14 @@ type Game struct {
 }
 
 func NewGame() Game {
-	g := &Game{
+	g := Game{
 		board:  []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"},
 		turn:   "X",
 		winner: "",
 		moves:  0,
 	}
 
-	return *g
+	return g
 }
 
 func (g *Game) GetBoard() []string {
@@ -45,6 +45,10 @@ func (g *Game) HasWinner() bool {
 
 func (g *Game) SetCell(cell int, value string) {
 	g.board[cell] = value
+}
+
+func (g *Game) SetTurn(turn string) {
+	g.turn = turn
 }
 
 func (g *Game) CheckWinner() bool {

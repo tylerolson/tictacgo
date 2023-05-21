@@ -1,27 +1,27 @@
 package client
 
 import (
+	"encoding/json"
 	"github.com/tylerolson/tictacgo/tictacgo"
 	"log"
 	"net"
-	"strings"
 	"time"
 )
 
-type client struct {
+type Client struct {
 	room   string
 	player string
 	conn   net.Conn
 	game   tictacgo.Game
 }
 
-func (c *client) GetGame() tictacgo.Game {
-	return c.game
+func (c *Client) GetGame() *tictacgo.Game {
+	return &c.game
 }
 
-func NewClient(player string) *client {
+func NewClient(player string) Client {
 	g := tictacgo.NewGame()
-	return &client{
+	return Client{
 		room:   "",
 		conn:   nil,
 		player: player,
@@ -29,7 +29,7 @@ func NewClient(player string) *client {
 	}
 }
 
-func (c *client) EstablishConnection(ip string) {
+func (c *Client) EstablishConnection(ip string) {
 	conn, err := net.Dial("tcp", ip)
 	if err != nil {
 		log.Println(err)
@@ -40,46 +40,59 @@ func (c *client) EstablishConnection(ip string) {
 	go c.receiveResponse()
 }
 
-func (c *client) sendRequest(message string) {
-	_, err := c.conn.Write([]byte(message))
+func (c *Client) sendRequest(message interface{}) {
+	encoder := json.NewEncoder(c.conn)
+	err := encoder.Encode(message)
 	if err != nil {
 		return
 	}
 }
 
-func (c *client) receiveResponse() {
+func (c *Client) receiveResponse() {
 	for {
-		bytes := make([]byte, 1024)
-		_, err := c.conn.Read(bytes)
-		if err != nil {
+		var message map[string]interface{}
+
+		decoder := json.NewDecoder(c.conn)
+		if err := decoder.Decode(&message); err != nil {
+			log.Println(err)
 			return
 		}
 
-		message := strings.Split(string(bytes), ",")
-
-		if message[0] == "BOARD" {
-			for i := 0; i < 9; i++ {
-				c.game.SetCell(i, message[i+1])
-			}
+		for i := 0; i < 9; i++ {
+			c.game.SetCell(i, message["Board"].([]interface{})[i].(string))
 		}
+
+		c.game.SetTurn(message["Turn"].(string))
 
 		time.Sleep(50 * time.Millisecond)
 	}
 }
 
-func (c *client) MakeMove(move string) {
-	m := "MAKE_MOVE,"
-	m += c.room + ","
-	m += c.player + ","
-	m += move + ","
+func (c *Client) MakeMove(move string) {
+	type message struct {
+		Request string
+		Room    string
+		Player  string
+		Move    string
+	}
 
-	c.sendRequest(m)
+	c.sendRequest(message{
+		Request: "MAKE_MOVE",
+		Room:    c.room,
+		Player:  c.player,
+		Move:    move,
+	})
 }
 
-func (c *client) CreateRoom(room string) {
+func (c *Client) CreateRoom(room string) {
 	c.room = room
-	m := "CREATE_ROOM,"
-	m += room + ","
+	type message struct {
+		Request string
+		Room    string
+	}
 
-	c.sendRequest(m)
+	c.sendRequest(message{
+		Request: "CREATE_ROOM",
+		Room:    room,
+	})
 }

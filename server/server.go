@@ -1,19 +1,23 @@
 package main
 
 import (
+	"encoding/json"
 	"github.com/tylerolson/tictacgo/tictacgo"
-	"io"
 	"log"
 	"net"
-	"strings"
 )
 
-var rooms = make(map[string]room)
+type room struct {
+	name string
+	game tictacgo.Game
+}
+
+var rooms = make(map[string]*room)
 
 func createRoom(name string) {
 	g := tictacgo.NewGame()
 	r := room{name, g}
-	rooms[name] = r
+	rooms[name] = &r
 
 	log.Println("Created room " + name)
 }
@@ -42,45 +46,46 @@ func main() {
 
 func handleConnection(conn net.Conn) {
 	for {
-		bytes := make([]byte, 1024)
-		_, err := conn.Read(bytes)
-		if err != nil && err == io.EOF {
-			conn.Close()
+		var message map[string]interface{}
+		decoder := json.NewDecoder(conn)
+		err := decoder.Decode(&message)
+		if err != nil {
 			return
-		} else if err != nil {
-			log.Fatal(err)
 		}
 
-		log.Println(string(bytes))
-
-		message := strings.Split(string(bytes), ",")
-
-		if message[0] == "CREATE_ROOM" {
-			createRoom(message[1])
-		} else if message[0] == "JOIN_ROOM" {
+		if message["Request"] == "CREATE_ROOM" {
+			createRoom(message["Room"].(string))
+		} else if message["Request"] == "JOIN_ROOM" {
 			// something
-		} else if message[0] == "MAKE_MOVE" { //MAKE_MOVE ROOM PLAYER MOVE
-			g, ok := rooms[message[1]]
+		} else if message["Request"] == "MAKE_MOVE" { //MAKE_MOVE ROOM PLAYER MOVE
+			room, ok := rooms[message["Room"].(string)]
 			if !ok {
-				log.Println("room '" + message[1] + "' does not exist")
+				log.Println("room '" + message["Room"].(string) + "' does not exist")
 				return
 			}
 
-			if g.game.GetTurn() == message[2] {
-				g.game.Move(message[3])
+			if room.game.GetTurn() == message["Player"].(string) {
+				room.game.Move(message["Move"].(string))
 			}
 
-			board := "BOARD,"
-
-			for i := 0; i < 9; i++ {
-				board += g.game.GetBoard()[i] + ","
+			type message struct {
+				Request string
+				Board   []string
+				Turn    string
 			}
 
-			_, err := conn.Write([]byte(board))
+			mess := message{
+				Request: "UPDATE",
+				Board:   room.game.GetBoard(),
+				Turn:    room.game.GetTurn(),
+			}
+
+			encoder := json.NewEncoder(conn)
+			err := encoder.Encode(mess)
 			if err != nil {
 				return
 			}
-
 		}
+
 	}
 }
