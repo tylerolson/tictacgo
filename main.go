@@ -12,57 +12,30 @@ import (
 	"strings"
 )
 
-type model struct {
-	state    string
+type menuModel struct {
 	choices  []string
 	cursor   int
-	menuHelp help.Model
 	menuKeys menuKeyMap
-
-	isMultiplayer bool
-	game          *tictacgo.Game
-	boardTable    table.Model
-	gameKeys      gameKeyMap
-	client        *tictacgo.Client
 }
 
-func (m model) Init() tea.Cmd {
+func newMenuModel() *menuModel {
+	return &menuModel{
+		choices:  []string{"Start Solo", "Create Room", "Join Room", "Exit"},
+		cursor:   0,
+		menuKeys: menuKeys,
+	}
+}
+
+func (m menuModel) Init() tea.Cmd {
 	return nil
 }
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if msg, ok := msg.(tea.KeyMsg); ok {
-		k := msg.String()
-		if k == "q" || k == "esc" || k == "ctrl+c" {
-			return m, tea.Quit
-		}
-	}
-
-	if m.state == "menu" {
-		return m.UpdateMenu(msg)
-	} else if m.state == "game" {
-		return m.UpdateGame(msg)
-	}
-
-	return m, nil
-}
-
-func (m model) View() string {
-	if m.state == "menu" {
-		return m.ViewMenu()
-	} else if m.state == "game" {
-		return m.ViewGame()
-	}
-
-	return "oops"
-}
-
-// sub updates
-
-func (m model) UpdateMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m menuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch {
+		case key.Matches(msg, m.menuKeys.Quit):
+			return m, tea.Quit
 		case key.Matches(msg, m.menuKeys.Up):
 			if m.cursor > 0 {
 				m.cursor--
@@ -74,26 +47,13 @@ func (m model) UpdateMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, m.menuKeys.Enter):
-			if m.cursor == 0 {
-				m.state = "game"
+			if m.cursor == 0 { //local
+				return newLocalGameModel(), nil
+			} else if m.cursor == 1 { //create room
 				return m, nil
-			} else if m.cursor == 1 {
-				m.state = "game"
-				m.isMultiplayer = true
-				m.client = tictacgo.NewClient()
-				m.client.SetPlayer("X")
-				m.client.EstablishConnection("localhost:8080")
-				m.client.CreateRoom("yo")
+			} else if m.cursor == 2 { //join room
 				return m, nil
-			} else if m.cursor == 2 {
-				m.state = "game"
-				m.isMultiplayer = true
-				m.client = tictacgo.NewClient()
-				m.client.SetPlayer("O")
-				m.client.EstablishConnection("localhost:8080")
-				m.client.JoinRoom("yo")
-				return m, nil
-			} else if m.cursor == 3 {
+			} else if m.cursor == 3 { //exit
 				return m, tea.Quit
 			}
 		}
@@ -102,40 +62,7 @@ func (m model) UpdateMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m model) UpdateGame(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "1", "2", "3", "4", "5", "6", "7", "8", "9":
-			g := m.game
-			if m.isMultiplayer {
-				m.client.MakeMove(msg.String())
-				g = m.client.GetGame()
-				m.game.SetTurn(m.client.GetGame().GetTurn())
-			} else {
-				if !m.game.Move(msg.String()) {
-					return m, nil
-				}
-			}
-
-			r := m.boardTable.Rows()
-
-			for i := 0; i < 9; i++ {
-				r[i/3][i%3] = g.GetBoard()[i]
-			}
-
-			m.boardTable.SetRows(r)
-
-			return m, nil
-		}
-	}
-
-	return m, nil
-}
-
-//sub views
-
-func (m model) ViewMenu() string {
+func (m menuModel) View() string {
 	s := strings.Builder{}
 	s.WriteString("\n")
 
@@ -158,39 +85,15 @@ func (m model) ViewMenu() string {
 	return marginStyle.Render(s.String())
 }
 
-func (m model) ViewGame() string {
-	s := strings.Builder{}
+// local game model
 
-	s.WriteString(m.boardTable.View())
-
-	s.WriteString("\n\n")
-
-	if m.game.CheckWinner() {
-		if m.game.GetWinner() == "tie" {
-			s.WriteString("\n\nIt is a tie!")
-		} else {
-			s.WriteString("\n\n")
-			s.WriteString(m.game.GetWinner())
-			s.WriteString(" wins!")
-		}
-	} else {
-		s.WriteString("It is ")
-		s.WriteString(m.game.GetTurn())
-		s.WriteString("'s turn")
-	}
-
-	s.WriteString("\n")
-
-	s.WriteString("\n")
-	s.WriteString(help.New().View(m.gameKeys))
-	s.WriteString("\n")
-
-	var marginStyle = lipgloss.NewStyle().MarginLeft(10)
-
-	return marginStyle.Render(s.String())
+type localGameModel struct {
+	game       *tictacgo.Game
+	boardTable table.Model
+	gameKeys   gameKeyMap
 }
 
-func main() {
+func newLocalGameModel() *localGameModel {
 	columns := []table.Column{
 		{Title: "", Width: 3},
 		{Title: "", Width: 3},
@@ -208,8 +111,6 @@ func main() {
 		table.WithHeight(10),
 	)
 
-	g := tictacgo.NewGame()
-
 	s := table.DefaultStyles()
 	s.Selected = lipgloss.NewStyle()
 	s.Header = lipgloss.NewStyle()
@@ -217,17 +118,77 @@ func main() {
 	s.Cell = s.Cell.Border(lipgloss.NormalBorder()).Bold(false).Align(lipgloss.Center, lipgloss.Center)
 	t.SetStyles(s)
 
-	initialModel := model{
-		state:      "menu",
-		choices:    []string{"Start Solo", "Create Room", "Join Room", "Exit"},
-		cursor:     0,
-		menuKeys:   menuKeys,
-		game:       g,
+	return &localGameModel{
+		game:       tictacgo.NewGame(),
 		boardTable: t,
 		gameKeys:   gameKeys,
 	}
+}
 
-	p := tea.NewProgram(initialModel)
+func (l localGameModel) Init() tea.Cmd {
+	return nil
+}
+
+func (l localGameModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch {
+		case key.Matches(msg, l.gameKeys.Quit):
+			return newMenuModel(), nil
+		case key.Matches(msg, l.gameKeys.Move):
+			g := l.game
+			if !l.game.Move(msg.String()) {
+				return l, nil
+			}
+
+			r := l.boardTable.Rows()
+
+			for i := 0; i < 9; i++ {
+				r[i/3][i%3] = g.GetBoard()[i]
+			}
+
+			l.boardTable.SetRows(r)
+
+			return l, nil
+		}
+	}
+
+	return l, nil
+}
+
+func (l localGameModel) View() string {
+	s := strings.Builder{}
+
+	s.WriteString(l.boardTable.View())
+
+	s.WriteString("\n\n")
+
+	if l.game.CheckWinner() {
+		if l.game.GetWinner() == "tie" {
+			s.WriteString("It is a tie!")
+		} else {
+			s.WriteString(l.game.GetWinner())
+			s.WriteString(" wins!")
+		}
+	} else {
+		s.WriteString("It is ")
+		s.WriteString(l.game.GetTurn())
+		s.WriteString("'s turn")
+	}
+
+	s.WriteString("\n")
+
+	s.WriteString("\n")
+	s.WriteString(help.New().View(l.gameKeys))
+	s.WriteString("\n")
+
+	var marginStyle = lipgloss.NewStyle().MarginLeft(10)
+
+	return marginStyle.Render(s.String())
+}
+
+func main() {
+	p := tea.NewProgram(newMenuModel())
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Alas, there's been an error: %v", err)
 		os.Exit(1)
