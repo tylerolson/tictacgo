@@ -134,6 +134,8 @@ func (g *Game) Move(cell string) bool {
 
 	g.moves++
 
+	g.CheckWinner()
+
 	return true
 }
 

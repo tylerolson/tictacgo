@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func main() {
+func _main() {
 	fmt.Println("Pick a player to be (X/O)")
 	playerChoice := ""
 	_, err := fmt.Scanln(&playerChoice)

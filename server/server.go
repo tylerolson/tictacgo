@@ -111,7 +111,6 @@ func (s *server) handleConnection(conn net.Conn) {
 
 			s.broadcastUpdates(message.Room)
 		}
-
 	}
 }
 
