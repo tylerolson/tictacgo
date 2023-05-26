@@ -48,11 +48,11 @@ func (m menuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.menuKeys.Enter):
 			if m.cursor == 0 { //local
-				return newLocalGameModel(), nil
+				return newGameModel(true), nil
 			} else if m.cursor == 1 { //create room
-				return m, nil
+				return newGameModel(false), nil
 			} else if m.cursor == 2 { //join room
-				return m, nil
+				return newGameModel(false), nil
 			} else if m.cursor == 3 { //exit
 				return m, tea.Quit
 			}
@@ -63,7 +63,7 @@ func (m menuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m menuModel) View() string {
-	s := strings.Builder{}
+	var s strings.Builder
 	s.WriteString("\n")
 
 	for i, choice := range m.choices {
@@ -85,15 +85,17 @@ func (m menuModel) View() string {
 	return marginStyle.Render(s.String())
 }
 
-// local game model
+// game model
 
-type localGameModel struct {
+type gameModel struct {
 	game       *tictacgo.Game
 	boardTable table.Model
 	gameKeys   gameKeyMap
+	isLocal    bool
+	client     *tictacgo.Client
 }
 
-func newLocalGameModel() *localGameModel {
+func newGameModel(local bool) *gameModel {
 	columns := []table.Column{
 		{Title: "", Width: 3},
 		{Title: "", Width: 3},
@@ -118,73 +120,91 @@ func newLocalGameModel() *localGameModel {
 	s.Cell = s.Cell.Border(lipgloss.NormalBorder()).Bold(false).Align(lipgloss.Center, lipgloss.Center)
 	t.SetStyles(s)
 
-	return &localGameModel{
-		game:       tictacgo.NewGame(),
-		boardTable: t,
-		gameKeys:   gameKeys,
+	if local {
+		return &gameModel{
+			game:       tictacgo.NewGame(),
+			boardTable: t,
+			gameKeys:   gameKeys,
+			isLocal:    local,
+		}
+	} else {
+		c := tictacgo.NewClient()
+		c.EstablishConnection("localhost:8080")
+		c.CreateRoom("yo")
+		c.SetPlayer("X")
+		return &gameModel{
+			game:       tictacgo.NewGame(),
+			boardTable: t,
+			gameKeys:   gameKeys,
+			isLocal:    local,
+			client:     c,
+		}
 	}
 }
 
-func (l localGameModel) Init() tea.Cmd {
+func (gm gameModel) Init() tea.Cmd {
 	return nil
 }
 
-func (l localGameModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (gm gameModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch {
-		case key.Matches(msg, l.gameKeys.Quit):
+		case key.Matches(msg, gm.gameKeys.Quit):
 			return newMenuModel(), nil
-		case key.Matches(msg, l.gameKeys.Move):
-			g := l.game
-			if !l.game.Move(msg.String()) {
-				return l, nil
+		case key.Matches(msg, gm.gameKeys.Move):
+			r := gm.boardTable.Rows()
+			if gm.isLocal {
+				if !gm.game.Move(msg.String()) {
+					return gm, nil
+				}
+				for i := 0; i < 9; i++ {
+					r[i/3][i%3] = gm.game.GetBoard()[i]
+				}
+			} else {
+				gm.client.MakeMove(msg.String())
+				for i := 0; i < 9; i++ {
+					r[i/3][i%3] = gm.client.GetGame().GetBoard()[i]
+				}
 			}
-
-			r := l.boardTable.Rows()
-
-			for i := 0; i < 9; i++ {
-				r[i/3][i%3] = g.GetBoard()[i]
-			}
-
-			l.boardTable.SetRows(r)
-
-			return l, nil
+			gm.boardTable.SetRows(r)
+			return gm, nil
 		}
 	}
 
-	return l, nil
+	return gm, nil
 }
 
-func (l localGameModel) View() string {
+func (gm gameModel) View() string {
 	s := strings.Builder{}
 
-	s.WriteString(l.boardTable.View())
-
+	s.WriteString(gm.boardTable.View())
 	s.WriteString("\n\n")
 
-	if l.game.CheckWinner() {
-		if l.game.GetWinner() == "tie" {
+	game := gm.game
+	if !gm.isLocal {
+		game = gm.client.GetGame()
+	}
+
+	if game.CheckWinner() {
+		if game.GetWinner() == "tie" {
 			s.WriteString("It is a tie!")
 		} else {
-			s.WriteString(l.game.GetWinner())
+			s.WriteString(game.GetWinner())
 			s.WriteString(" wins!")
 		}
 	} else {
 		s.WriteString("It is ")
-		s.WriteString(l.game.GetTurn())
+		s.WriteString(game.GetTurn())
 		s.WriteString("'s turn")
 	}
 
 	s.WriteString("\n")
-
 	s.WriteString("\n")
-	s.WriteString(help.New().View(l.gameKeys))
+	s.WriteString(help.New().View(gm.gameKeys))
 	s.WriteString("\n")
 
-	var marginStyle = lipgloss.NewStyle().MarginLeft(10)
-
-	return marginStyle.Render(s.String())
+	return lipgloss.NewStyle().MarginLeft(10).Render(s.String())
 }
 
 func main() {

@@ -65,7 +65,6 @@ func (c *Client) receiveResponse() {
 }
 
 func (c *Client) MakeMove(move string) {
-
 	err := json.NewEncoder(c.conn).Encode(Message{
 		Request: MAKE_MOVE,
 		Room:    c.room,
@@ -73,7 +72,7 @@ func (c *Client) MakeMove(move string) {
 		Move:    move,
 	})
 	if err != nil {
-		return
+		log.Fatal("MakeMove failed", err)
 	}
 }
 
