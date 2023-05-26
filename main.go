@@ -40,19 +40,19 @@ func (m menuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.cursor > 0 {
 				m.cursor--
 			}
-
 		case key.Matches(msg, m.menuKeys.Down):
 			if m.cursor < len(m.choices)-1 {
 				m.cursor++
 			}
-
 		case key.Matches(msg, m.menuKeys.Enter):
 			if m.cursor == 0 { //local
-				return newGameModel(true), nil
+				return newGameModel(true, "X"), nil
 			} else if m.cursor == 1 { //create room
-				return newGameModel(false), nil
+				gm := newGameModel(false, "X")
+				return gm, gm.Init()
 			} else if m.cursor == 2 { //join room
-				return newGameModel(false), nil
+				gm := newGameModel(false, "O")
+				return gm, gm.Init()
 			} else if m.cursor == 3 { //exit
 				return m, tea.Quit
 			}
@@ -64,25 +64,17 @@ func (m menuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m menuModel) View() string {
 	var s strings.Builder
-	s.WriteString("\n")
 
 	for i, choice := range m.choices {
-		cursor := " " // no cursor
+		cursor := " "
 		if m.cursor == i {
-			cursor = "> " // cursor!
+			cursor = "> "
 		}
-		s.WriteString(cursor)
-		s.WriteString(choice)
-		s.WriteString("\n")
+		s.WriteString(cursor + choice + "\n")
 	}
+	s.WriteString("\n\n" + help.New().View(m.menuKeys))
 
-	s.WriteString("\n")
-	s.WriteString(help.New().View(m.menuKeys))
-	s.WriteString("\n")
-
-	var marginStyle = lipgloss.NewStyle().MarginLeft(10)
-
-	return marginStyle.Render(s.String())
+	return lipgloss.NewStyle().Margin(2, 10).Render(s.String())
 }
 
 // game model
@@ -95,7 +87,7 @@ type gameModel struct {
 	client     *tictacgo.Client
 }
 
-func newGameModel(local bool) *gameModel {
+func newGameModel(local bool, player string) *gameModel {
 	columns := []table.Column{
 		{Title: "", Width: 3},
 		{Title: "", Width: 3},
@@ -107,68 +99,79 @@ func newGameModel(local bool) *gameModel {
 		{"7", "8", "9"},
 	}
 
-	t := table.New(
-		table.WithColumns(columns),
-		table.WithRows(rows),
-		table.WithHeight(10),
-	)
+	t := table.New(table.WithColumns(columns), table.WithRows(rows), table.WithHeight(10))
 
 	s := table.DefaultStyles()
 	s.Selected = lipgloss.NewStyle()
 	s.Header = lipgloss.NewStyle()
-	s.Cell = lipgloss.NewStyle()
-	s.Cell = s.Cell.Border(lipgloss.NormalBorder()).Bold(false).Align(lipgloss.Center, lipgloss.Center)
+	s.Cell = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).Bold(false).Align(lipgloss.Center, lipgloss.Center)
 	t.SetStyles(s)
 
-	if local {
-		return &gameModel{
-			game:       tictacgo.NewGame(),
-			boardTable: t,
-			gameKeys:   gameKeys,
-			isLocal:    local,
-		}
-	} else {
+	gm := gameModel{
+		game:       tictacgo.NewGame(),
+		boardTable: t,
+		gameKeys:   gameKeys,
+		isLocal:    local,
+	}
+
+	if !local {
 		c := tictacgo.NewClient()
 		c.EstablishConnection("localhost:8080")
-		c.CreateRoom("yo")
-		c.SetPlayer("X")
-		return &gameModel{
-			game:       tictacgo.NewGame(),
-			boardTable: t,
-			gameKeys:   gameKeys,
-			isLocal:    local,
-			client:     c,
+		c.SetPlayer(player)
+		if player == "X" {
+			c.CreateRoom("yo")
+		} else if player == "O" {
+			c.JoinRoom("yo")
 		}
+		gm.client = c
+
+		receiveUpdate(c.GetUpdateChannel())
+	}
+
+	return &gm
+}
+
+func receiveUpdate(channel chan tictacgo.Response) tea.Cmd {
+	return func() tea.Msg {
+		return <-channel
 	}
 }
 
 func (gm gameModel) Init() tea.Cmd {
-	return nil
+	return receiveUpdate(gm.client.GetUpdateChannel())
 }
 
 func (gm gameModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tictacgo.Response:
+		g := gm.client.GetGame()
+		g.SetTurn(msg.Turn)
+		g.SetWinner(msg.Winner)
+		g.SetBoard(msg.Board)
+		r := gm.boardTable.Rows()
+		for i := 0; i < 9; i++ {
+			r[i/3][i%3] = gm.client.GetGame().GetBoard()[i]
+		}
+		gm.boardTable.SetRows(r)
+		return gm, receiveUpdate(gm.client.GetUpdateChannel())
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, gm.gameKeys.Quit):
 			return newMenuModel(), nil
 		case key.Matches(msg, gm.gameKeys.Move):
-			r := gm.boardTable.Rows()
-			if gm.isLocal {
-				if !gm.game.Move(msg.String()) {
-					return gm, nil
-				}
+			if !gm.isLocal {
+				gm.client.MakeMove(msg.String())
+				return gm, nil
+			}
+
+			if gm.game.Move(msg.String()) {
+				r := gm.boardTable.Rows()
 				for i := 0; i < 9; i++ {
 					r[i/3][i%3] = gm.game.GetBoard()[i]
 				}
-			} else {
-				gm.client.MakeMove(msg.String())
-				for i := 0; i < 9; i++ {
-					r[i/3][i%3] = gm.client.GetGame().GetBoard()[i]
-				}
+				gm.boardTable.SetRows(r)
+				return gm, nil
 			}
-			gm.boardTable.SetRows(r)
-			return gm, nil
 		}
 	}
 
@@ -178,33 +181,28 @@ func (gm gameModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (gm gameModel) View() string {
 	s := strings.Builder{}
 
-	s.WriteString(gm.boardTable.View())
-	s.WriteString("\n\n")
+	s.WriteString(gm.boardTable.View() + "\n")
 
 	game := gm.game
 	if !gm.isLocal {
 		game = gm.client.GetGame()
 	}
 
-	if game.CheckWinner() {
-		if game.GetWinner() == "tie" {
-			s.WriteString("It is a tie!")
-		} else {
-			s.WriteString(game.GetWinner())
-			s.WriteString(" wins!")
-		}
+	if game.GetWinner() == "" {
+		s.WriteString("It is " + game.GetTurn() + "'s turn")
+	} else if game.GetWinner() == "tie" {
+		s.WriteString("It is a tie!")
 	} else {
-		s.WriteString("It is ")
-		s.WriteString(game.GetTurn())
-		s.WriteString("'s turn")
+		s.WriteString(game.GetWinner() + " wins!")
 	}
 
-	s.WriteString("\n")
-	s.WriteString("\n")
-	s.WriteString(help.New().View(gm.gameKeys))
-	s.WriteString("\n")
+	if !gm.isLocal {
+		s.WriteString("\nYou are " + gm.client.GetPlayer())
+	}
 
-	return lipgloss.NewStyle().MarginLeft(10).Render(s.String())
+	s.WriteString("\n\n\n" + help.New().View(gm.gameKeys))
+
+	return lipgloss.NewStyle().Margin(2, 10).Render(s.String())
 }
 
 func main() {

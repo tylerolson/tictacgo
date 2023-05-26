@@ -8,14 +8,23 @@ import (
 )
 
 type Client struct {
-	room   string
-	player string
-	conn   net.Conn
-	game   *Game
+	room          string
+	player        string
+	conn          net.Conn
+	game          *Game
+	updateChannel chan Response
+}
+
+func (c *Client) GetPlayer() string {
+	return c.player
 }
 
 func (c *Client) GetGame() *Game {
 	return c.game
+}
+
+func (c *Client) GetUpdateChannel() chan Response {
+	return c.updateChannel
 }
 
 func (c *Client) SetPlayer(player string) {
@@ -25,10 +34,11 @@ func (c *Client) SetPlayer(player string) {
 func NewClient() *Client {
 	g := NewGame()
 	return &Client{
-		room:   "",
-		conn:   nil,
-		player: "",
-		game:   g,
+		room:          "",
+		conn:          nil,
+		player:        "",
+		game:          g,
+		updateChannel: make(chan Response),
 	}
 }
 
@@ -45,20 +55,22 @@ func (c *Client) EstablishConnection(ip string) {
 
 func (c *Client) receiveResponse() {
 	for {
-		var message Message
+		var response Response
 
 		decoder := json.NewDecoder(c.conn)
-		if err := decoder.Decode(&message); err != nil {
-			log.Println(err)
+		if err := decoder.Decode(&response); err != nil {
+			log.Println("Couldn't decode response", err)
 			return
 		}
 
 		for i := 0; i < 9; i++ {
-			c.game.SetCell(i, message.Board[i])
+			c.game.SetCell(i, response.Board[i])
 		}
 
-		c.game.SetTurn(message.Turn)
-		c.game.SetWinner(message.Winner)
+		c.game.SetTurn(response.Turn)
+		c.game.SetWinner(response.Winner)
+
+		c.updateChannel <- response
 
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -66,13 +78,13 @@ func (c *Client) receiveResponse() {
 
 func (c *Client) MakeMove(move string) {
 	err := json.NewEncoder(c.conn).Encode(Message{
-		Request: MAKE_MOVE,
+		Request: MakeMove,
 		Room:    c.room,
 		Player:  c.player,
 		Move:    move,
 	})
 	if err != nil {
-		log.Fatal("MakeMove failed", err)
+		log.Fatal("MakeMove failed to send", err)
 	}
 }
 
@@ -80,11 +92,11 @@ func (c *Client) CreateRoom(room string) {
 	c.room = room
 
 	err := json.NewEncoder(c.conn).Encode(Message{
-		Request: CREATE_ROOM,
+		Request: CreateRoom,
 		Room:    room,
 	})
 	if err != nil {
-		return
+		log.Fatal("CreateRoom failed to send", err)
 	}
 }
 
@@ -92,10 +104,10 @@ func (c *Client) JoinRoom(room string) {
 	c.room = room
 
 	err := json.NewEncoder(c.conn).Encode(Message{
-		Request: JOIN_ROOM,
+		Request: JoinRoom,
 		Room:    room,
 	})
 	if err != nil {
-		return
+		log.Fatal("JoinRoom failed to send", err)
 	}
 }
