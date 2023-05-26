@@ -41,6 +41,10 @@ func (g *Game) HasWinner() bool {
 	return g.winner != ""
 }
 
+func (g *Game) SetBoard(board []string) {
+	g.board = board
+}
+
 func (g *Game) SetCell(cell int, value string) {
 	g.board[cell] = value
 }

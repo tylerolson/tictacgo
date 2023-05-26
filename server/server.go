@@ -82,17 +82,17 @@ func (s *server) handleConnection(conn net.Conn) {
 			Strs("Board", message.Board).
 			Msg("Received message")
 
-		if message.Request == tictacgo.CREATE_ROOM {
+		if message.Request == tictacgo.CreateRoom {
 			s.createRoom(message.Room)
 			s.rooms[message.Room].connections[conn.RemoteAddr().String()] = conn
-		} else if message.Request == tictacgo.JOIN_ROOM {
+		} else if message.Request == tictacgo.JoinRoom {
 			r, ok := s.rooms[message.Room]
 			if !ok {
 				log.Warn().Msg("Room does not exist")
 				return
 			}
 			r.connections[conn.RemoteAddr().String()] = conn
-		} else if message.Request == tictacgo.MAKE_MOVE { //MAKE_MOVE ROOM PLAYER MOVE
+		} else if message.Request == tictacgo.MakeMove { //MakeMove ROOM PLAYER MOVE
 			room, ok := s.rooms[message.Room]
 			if !ok {
 				log.Warn().Msg("room '" + message.Room + "' does not exist")
@@ -117,16 +117,22 @@ func (s *server) handleConnection(conn net.Conn) {
 
 func (s *server) broadcastUpdates(roomStr string) {
 	mess := tictacgo.Message{
-		Request: tictacgo.UPDATE,
+		Request: tictacgo.Update,
+		Room:    roomStr,
+		Move:    s.rooms[roomStr].game.GetTurn(),
 		Board:   s.rooms[roomStr].game.GetBoard(),
 		Turn:    s.rooms[roomStr].game.GetTurn(),
 		Winner:  s.rooms[roomStr].game.GetWinner(),
+	}
+	res := tictacgo.Response{
+		Code:    tictacgo.Success,
+		Message: mess,
 	}
 	for _, room := range s.rooms {
 		if room.name == roomStr {
 			for _, conn := range room.connections {
 				encoder := json.NewEncoder(conn)
-				err := encoder.Encode(mess)
+				err := encoder.Encode(res)
 				if err != nil {
 					return
 				}

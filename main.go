@@ -48,11 +48,13 @@ func (m menuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.menuKeys.Enter):
 			if m.cursor == 0 { //local
-				return newGameModel(true), nil
+				return newGameModel(true, "X"), nil
 			} else if m.cursor == 1 { //create room
-				return newGameModel(false), nil
+				gm := newGameModel(false, "X")
+				return gm, gm.Init()
 			} else if m.cursor == 2 { //join room
-				return newGameModel(false), nil
+				gm := newGameModel(false, "O")
+				return gm, gm.Init()
 			} else if m.cursor == 3 { //exit
 				return m, tea.Quit
 			}
@@ -95,7 +97,7 @@ type gameModel struct {
 	client     *tictacgo.Client
 }
 
-func newGameModel(local bool) *gameModel {
+func newGameModel(local bool, player string) *gameModel {
 	columns := []table.Column{
 		{Title: "", Width: 3},
 		{Title: "", Width: 3},
@@ -130,8 +132,15 @@ func newGameModel(local bool) *gameModel {
 	} else {
 		c := tictacgo.NewClient()
 		c.EstablishConnection("localhost:8080")
-		c.CreateRoom("yo")
-		c.SetPlayer("X")
+		if player == "X" {
+			c.CreateRoom("yo")
+			c.SetPlayer(player)
+		} else {
+			c.JoinRoom("yo")
+			c.SetPlayer(player)
+		}
+
+		receiveUpdate(c.GetUpdateChannel())
 		return &gameModel{
 			game:       tictacgo.NewGame(),
 			boardTable: t,
@@ -142,12 +151,29 @@ func newGameModel(local bool) *gameModel {
 	}
 }
 
+func receiveUpdate(channel chan tictacgo.Response) tea.Cmd {
+	return func() tea.Msg {
+		return <-channel
+	}
+}
+
 func (gm gameModel) Init() tea.Cmd {
-	return nil
+	return receiveUpdate(gm.client.GetUpdateChannel())
 }
 
 func (gm gameModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tictacgo.Response:
+		g := gm.client.GetGame()
+		g.SetTurn(msg.Turn)
+		g.SetWinner(msg.Winner)
+		g.SetBoard(msg.Board)
+		r := gm.boardTable.Rows()
+		for i := 0; i < 9; i++ {
+			r[i/3][i%3] = gm.client.GetGame().GetBoard()[i]
+		}
+		gm.boardTable.SetRows(r)
+		return gm, receiveUpdate(gm.client.GetUpdateChannel())
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, gm.gameKeys.Quit):
@@ -163,9 +189,6 @@ func (gm gameModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			} else {
 				gm.client.MakeMove(msg.String())
-				for i := 0; i < 9; i++ {
-					r[i/3][i%3] = gm.client.GetGame().GetBoard()[i]
-				}
 			}
 			gm.boardTable.SetRows(r)
 			return gm, nil
@@ -197,6 +220,10 @@ func (gm gameModel) View() string {
 		s.WriteString("It is ")
 		s.WriteString(game.GetTurn())
 		s.WriteString("'s turn")
+	}
+
+	if !gm.isLocal {
+		s.WriteString("\nYou are " + gm.client.GetPlayer())
 	}
 
 	s.WriteString("\n")

@@ -1,10 +1,12 @@
 package tictacgo
 
 const (
-	CREATE_ROOM = "CREATE_ROOM"
-	JOIN_ROOM   = "JOIN_ROOM"
-	MAKE_MOVE   = "MAKE_MOVE"
-	UPDATE      = "UPDATE"
+	CreateRoom = "CreateRoom"
+	JoinRoom   = "JoinRoom"
+	MakeMove   = "MakeMove"
+	Update     = "Update"
+	Success    = "Success"
+	Fail       = "Fail"
 )
 
 type Message struct {
@@ -15,4 +17,9 @@ type Message struct {
 	Turn    string   `json:"turn"`
 	Winner  string   `json:"winner"`
 	Board   []string `json:"board"`
+}
+
+type Response struct {
+	Code string `json:"code"`
+	Message
 }
