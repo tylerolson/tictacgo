@@ -2,9 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/tylerolson/tictacgo/tictacgo"
-	"log"
 	"net"
+	"os"
 )
 
 type room struct {
@@ -27,10 +29,13 @@ func (s *server) createRoom(name string) {
 	}
 	s.rooms[name] = &r
 
-	log.Println("Created room " + name)
+	log.Info().Msg("Created room " + name)
 }
 
 func main() {
+	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+
 	s := server{
 		rooms: make(map[string]*room),
 	}
@@ -38,20 +43,20 @@ func main() {
 	var err error
 	s.listener, err = net.Listen("tcp", ":8080")
 	if err != nil {
-		log.Fatal(err)
+		log.Error().Err(err).Msg("listener failed to start")
 	}
 	defer func(listen net.Listener) {
 		err := listen.Close()
 		if err != nil {
-			log.Fatal(err)
+			log.Error().Err(err).Msg("deferred listener")
 		}
 	}(s.listener)
 
-	log.Println("Running on port 8080")
+	log.Info().Msg("Running on port 8080")
 	for {
 		conn, err := s.listener.Accept()
 		if err != nil {
-			log.Fatal(err)
+			log.Error().Err(err).Msg("failed to accepted connection")
 		}
 
 		go s.handleConnection(conn)
@@ -67,20 +72,41 @@ func (s *server) handleConnection(conn net.Conn) {
 			return
 		}
 
+		log.Debug().
+			Str("Request", message.Request).
+			Str("Room", message.Room).
+			Str("Player", message.Player).
+			Str("Move", message.Move).
+			Str("Turn", message.Turn).
+			Str("Winner", message.Winner).
+			Strs("Board", message.Board).
+			Msg("Received message")
+
 		if message.Request == tictacgo.CREATE_ROOM {
 			s.createRoom(message.Room)
 			s.rooms[message.Room].connections[conn.RemoteAddr().String()] = conn
 		} else if message.Request == tictacgo.JOIN_ROOM {
-			s.rooms[message.Room].connections[conn.RemoteAddr().String()] = conn
+			r, ok := s.rooms[message.Room]
+			if !ok {
+				log.Warn().Msg("Room does not exist")
+				return
+			}
+			r.connections[conn.RemoteAddr().String()] = conn
 		} else if message.Request == tictacgo.MAKE_MOVE { //MAKE_MOVE ROOM PLAYER MOVE
 			room, ok := s.rooms[message.Room]
 			if !ok {
-				log.Println("room '" + message.Room + "' does not exist")
+				log.Warn().Msg("room '" + message.Room + "' does not exist")
+				return
+			}
+
+			if message.Player == "" {
+				log.Warn().Msg("Message Player does not exist")
 				return
 			}
 
 			if room.game.GetTurn() == message.Player {
 				room.game.Move(message.Move)
+				log.Debug().Msg("Made move " + message.Move + "in room " + room.name)
 			}
 
 			s.broadcastUpdates(message.Room)
