@@ -41,14 +41,13 @@ func main() {
 	}
 
 	var err error
-	s.listener, err = net.Listen("tcp", ":8080")
-	if err != nil {
+	if s.listener, err = net.Listen("tcp", ":8080"); err != nil {
 		log.Error().Err(err).Msg("listener failed to start")
 	}
+
 	defer func(listen net.Listener) {
-		err := listen.Close()
-		if err != nil {
-			log.Error().Err(err).Msg("deferred listener")
+		if err := listen.Close(); err != nil {
+			log.Fatal().Err(err).Msg("deferred listener")
 		}
 	}(s.listener)
 
@@ -56,7 +55,7 @@ func main() {
 	for {
 		conn, err := s.listener.Accept()
 		if err != nil {
-			log.Error().Err(err).Msg("failed to accepted connection")
+			log.Fatal().Err(err).Msg("failed to accepted connection")
 		}
 
 		go s.handleConnection(conn)
@@ -66,10 +65,9 @@ func main() {
 func (s *server) handleConnection(conn net.Conn) {
 	for {
 		var message tictacgo.Message
-		decoder := json.NewDecoder(conn)
-		err := decoder.Decode(&message)
-		if err != nil {
-			return
+
+		if err := json.NewDecoder(conn).Decode(&message); err != nil {
+			log.Fatal().Err(err).Msg("Couldn't decode message")
 		}
 
 		log.Debug().
@@ -82,17 +80,36 @@ func (s *server) handleConnection(conn net.Conn) {
 			Strs("Board", message.Board).
 			Msg("Received message")
 
-		if message.Request == tictacgo.CreateRoom {
+		switch message.Request {
+		case tictacgo.CreateRoom:
 			s.createRoom(message.Room)
 			s.rooms[message.Room].connections[conn.RemoteAddr().String()] = conn
-		} else if message.Request == tictacgo.JoinRoom {
+		case tictacgo.JoinRoom:
 			r, ok := s.rooms[message.Room]
 			if !ok {
 				log.Warn().Msg("Room does not exist")
 				return
 			}
 			r.connections[conn.RemoteAddr().String()] = conn
-		} else if message.Request == tictacgo.MakeMove { //MakeMove ROOM PLAYER MOVE
+			s.broadcastUpdates(message.Room)
+		case tictacgo.GetRooms:
+			rooms := make([]string, len(s.rooms))
+
+			i := 0
+			for k := range s.rooms {
+				rooms[i] = k
+				i++
+			}
+
+			mess := tictacgo.Message{
+				Request: tictacgo.GetRooms,
+				Rooms:   rooms,
+			}
+
+			if err := json.NewEncoder(conn).Encode(mess); err != nil {
+				log.Err(err).Msg("Couldn't encode message")
+			}
+		case tictacgo.MakeMove: //MakeMove ROOM PLAYER MOVE
 			room, ok := s.rooms[message.Room]
 			if !ok {
 				log.Warn().Msg("room '" + message.Room + "' does not exist")
@@ -115,13 +132,22 @@ func (s *server) handleConnection(conn net.Conn) {
 }
 
 func (s *server) broadcastUpdates(roomStr string) {
+	rooms := make([]string, len(s.rooms))
+
+	i := 0
+	for k := range s.rooms {
+		rooms[i] = k
+		i++
+	}
 	mess := tictacgo.Message{
 		Request: tictacgo.Update,
 		Room:    roomStr,
+		Rooms:   rooms,
+		Player:  "",
 		Move:    s.rooms[roomStr].game.GetTurn(),
-		Board:   s.rooms[roomStr].game.GetBoard(),
 		Turn:    s.rooms[roomStr].game.GetTurn(),
 		Winner:  s.rooms[roomStr].game.GetWinner(),
+		Board:   s.rooms[roomStr].game.GetBoard(),
 	}
 	res := tictacgo.Response{
 		Code:    tictacgo.Success,
@@ -129,6 +155,7 @@ func (s *server) broadcastUpdates(roomStr string) {
 	}
 	for _, room := range s.rooms {
 		if room.name == roomStr {
+
 			for _, conn := range room.connections {
 				encoder := json.NewEncoder(conn)
 				err := encoder.Encode(res)

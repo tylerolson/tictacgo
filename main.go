@@ -77,6 +77,75 @@ func (m menuModel) View() string {
 	return lipgloss.NewStyle().Margin(2, 10).Render(s.String())
 }
 
+// room model
+
+type roomModel struct {
+	choices  []string
+	cursor   int
+	menuKeys menuKeyMap
+}
+
+func newRoomModel() *roomModel {
+	return &roomModel{
+		choices:  []string{"First", "Second"},
+		cursor:   0,
+		menuKeys: menuKeys,
+	}
+}
+
+func (m roomModel) Init() tea.Cmd {
+	return nil
+}
+
+func (m roomModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch {
+		case key.Matches(msg, m.menuKeys.Quit):
+			return m, tea.Quit
+		case key.Matches(msg, m.menuKeys.Up):
+			if m.cursor > 0 {
+				m.cursor--
+			}
+		case key.Matches(msg, m.menuKeys.Down):
+			if m.cursor < len(m.choices)-1 {
+				m.cursor++
+			}
+		case key.Matches(msg, m.menuKeys.Enter):
+			if m.cursor == 0 { //local
+				return newGameModel(true, "X"), nil
+			} else if m.cursor == 1 { //create room
+				gm := newGameModel(false, "X")
+				return gm, gm.Init()
+			} else if m.cursor == 2 { //join room
+				gm := newGameModel(false, "O")
+				return gm, gm.Init()
+			} else if m.cursor == 3 { //exit
+				return m, tea.Quit
+			}
+		}
+	}
+
+	return m, nil
+}
+
+func (m roomModel) View() string {
+	var s strings.Builder
+
+	s.WriteString("Rooms\n")
+
+	for i, choice := range m.choices {
+		cursor := " "
+		if m.cursor == i {
+			cursor = "> "
+		}
+		s.WriteString(cursor + choice + "\n")
+	}
+	s.WriteString("\n\n" + help.New().View(m.menuKeys))
+
+	return lipgloss.NewStyle().Margin(2, 10).Render(s.String())
+}
+
 // game model
 
 type gameModel struct {

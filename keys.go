@@ -5,6 +5,8 @@ import "github.com/charmbracelet/bubbles/key"
 type menuKeyMap struct {
 	Up    key.Binding
 	Down  key.Binding
+	Left  key.Binding
+	Right key.Binding
 	Quit  key.Binding
 	Enter key.Binding
 }
@@ -15,7 +17,7 @@ type gameKeyMap struct {
 }
 
 func (k menuKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Enter, k.Quit}
+	return []key.Binding{k.Up, k.Down, k.Left, k.Right, k.Enter, k.Quit}
 }
 
 func (k gameKeyMap) ShortHelp() []key.Binding {
@@ -38,6 +40,14 @@ var menuKeys = menuKeyMap{
 	Down: key.NewBinding(
 		key.WithKeys("s", "down"),
 		key.WithHelp("↓/s", "move down"),
+	),
+	Left: key.NewBinding(
+		key.WithKeys("a", "left"),
+		key.WithHelp("←/a", "move left"),
+	),
+	Right: key.NewBinding(
+		key.WithKeys("d", "right"),
+		key.WithHelp("→/d", "move right"),
 	),
 	Enter: key.NewBinding(
 		key.WithKeys("enter"),
