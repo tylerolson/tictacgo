@@ -88,18 +88,6 @@ func (c *Client) MakeMove(move string) {
 	}
 }
 
-func (c *Client) CreateRoom(room string) {
-	c.room = room
-
-	err := json.NewEncoder(c.conn).Encode(Message{
-		Request: CreateRoom,
-		Room:    room,
-	})
-	if err != nil {
-		log.Fatal("CreateRoom failed to send", err)
-	}
-}
-
 func (c *Client) JoinRoom(room string) {
 	c.room = room
 
