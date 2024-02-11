@@ -14,11 +14,11 @@ type gameModel struct {
 	game       *tictacgo.Game
 	boardTable table.Model
 	gameKeys   gameKeyMap
-	isLocal    bool
+	room       string
 	client     *tictacgo.Client
 }
 
-func newGameModel(local bool, player string) *gameModel {
+func newGameModel(room string) *gameModel {
 	columns := []table.Column{
 		{Title: "", Width: 3},
 		{Title: "", Width: 3},
@@ -42,18 +42,16 @@ func newGameModel(local bool, player string) *gameModel {
 		game:       tictacgo.NewGame(),
 		boardTable: t,
 		gameKeys:   gameKeys,
-		isLocal:    local,
+		room:       room,
 	}
 
-	if !local {
+	if room != "" {
 		c := tictacgo.NewClient()
 		c.EstablishConnection("localhost:8080")
-		c.SetPlayer(player)
-		if player == "X" {
-			c.JoinRoom("yo")
-		} else if player == "O" {
-			c.JoinRoom("yo")
-		}
+		c.JoinRoom(room)
+
+		c.SetPlayer("X")
+
 		gm.client = c
 
 		receiveUpdate(c.GetUpdateChannel())
@@ -78,19 +76,22 @@ func (gm gameModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		g := gm.client.GetGame()
 		g.SetTurn(msg.Turn)
 		g.SetWinner(msg.Winner)
-		g.SetBoard(msg.Board)
-		r := gm.boardTable.Rows()
-		for i := 0; i < 9; i++ {
-			r[i/3][i%3] = gm.client.GetGame().GetBoard()[i]
+		if msg.Board != nil {
+			g.SetBoard(msg.Board) //possibly can be null
+			r := gm.boardTable.Rows()
+			for i := 0; i < 9; i++ {
+				r[i/3][i%3] = gm.client.GetGame().GetBoard()[i]
+			}
+			gm.boardTable.SetRows(r)
 		}
-		gm.boardTable.SetRows(r)
+
 		return gm, receiveUpdate(gm.client.GetUpdateChannel())
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, gm.gameKeys.Quit):
 			return newMenuModel(), nil
 		case key.Matches(msg, gm.gameKeys.Move):
-			if !gm.isLocal {
+			if gm.room != "" {
 				gm.client.MakeMove(msg.String())
 				return gm, nil
 			}
@@ -115,7 +116,7 @@ func (gm gameModel) View() string {
 	s.WriteString(gm.boardTable.View() + "\n")
 
 	game := gm.game
-	if !gm.isLocal {
+	if gm.room != "" {
 		game = gm.client.GetGame()
 	}
 
@@ -127,7 +128,7 @@ func (gm gameModel) View() string {
 		s.WriteString(game.GetWinner() + " wins!")
 	}
 
-	if !gm.isLocal {
+	if gm.room != "" {
 		s.WriteString("\nYou are " + gm.client.GetPlayer())
 	}
 

@@ -70,6 +70,7 @@ func UpdateTable(t *table.Model, rooms []tictacgo.Room) {
 }
 
 func (m roomModel) Init() tea.Cmd {
+	UpdateTable(&m.table, GetRooms())
 	return nil
 }
 
@@ -84,8 +85,8 @@ func (m roomModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			UpdateTable(&m.table, GetRooms())
 			return m, nil
 		case key.Matches(msg, m.roomKeys.Enter):
-			return m, tea.Batch(
-				tea.Printf("Let's go to %s!", m.table.SelectedRow()[1]))
+			gm := newGameModel(m.table.SelectedRow()[0])
+			return gm, gm.Init()
 		}
 	}
 
@@ -119,6 +120,4 @@ func GetRooms() []tictacgo.Room {
 	return rooms
 }
 
-func CreateRoom(room string) {
-
-}
+//func CreateRoom(room string) {}
