@@ -2,16 +2,17 @@ package main
 
 import (
 	"encoding/json"
+	"log"
+	"net/http"
+	"strconv"
+	"strings"
+
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/tylerolson/tictacgo/tictacgo"
-	"log"
-	"net/http"
-	"strconv"
-	"strings"
 )
 
 type roomModel struct {

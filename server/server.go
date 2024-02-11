@@ -2,14 +2,15 @@ package main
 
 import (
 	"encoding/json"
-	"github.com/gin-gonic/gin"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
-	"github.com/tylerolson/tictacgo/tictacgo"
 	"io"
 	"net"
 	"net/http"
 	"os"
+
+	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
+	"github.com/tylerolson/tictacgo/tictacgo"
 )
 
 type player struct {
