@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -60,28 +61,6 @@ func newRoomModel() *roomModel {
 	}
 }
 
-type updatedTable table.Model
-
-func updateTable(t table.Model) tea.Cmd { //tea.Cmd
-	return func() tea.Msg {
-		rooms, err := getRooms()
-		if err != nil {
-			log.Println("Failed to update table")
-			return nil
-		}
-
-		var rows []table.Row
-
-		for _, v := range rooms {
-			rows = append(rows, table.Row{v.Name, strconv.Itoa(v.Size)})
-		}
-
-		t.SetRows(rows)
-
-		return updatedTable(t)
-	}
-}
-
 func (m roomModel) Init() tea.Cmd {
 	return updateTable(m.table)
 }
@@ -89,13 +68,16 @@ func (m roomModel) Init() tea.Cmd {
 func (m roomModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
-	case updatedTable:
-		m.table = table.Model(msg)
+	case table.Model:
+		m.table = msg
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, m.roomKeys.Quit):
 			return m, tea.Quit
 		case key.Matches(msg, m.roomKeys.Refresh):
+			return m, updateTable(m.table)
+		case key.Matches(msg, m.roomKeys.Create):
+			createRoom("hello")
 			return m, updateTable(m.table)
 		case key.Matches(msg, m.roomKeys.Enter):
 			gm := newGameModel(m.table.SelectedRow()[0])
@@ -117,6 +99,26 @@ func (m roomModel) View() string {
 	return lipgloss.NewStyle().Margin(2, 10).Render(s.String())
 }
 
+func updateTable(t table.Model) tea.Cmd { //tea.Cmd
+	return func() tea.Msg {
+		rooms, err := getRooms()
+		if err != nil {
+			log.Println("Failed to update table")
+			return nil
+		}
+
+		var rows []table.Row
+
+		for _, v := range rooms {
+			rows = append(rows, table.Row{v.Name, strconv.Itoa(v.Size)})
+		}
+
+		t.SetRows(rows)
+
+		return t
+	}
+}
+
 func getRooms() ([]tictacgo.Room, error) {
 	res, err := http.Get("http://127.0.0.1:8081/rooms")
 	if err != nil {
@@ -133,4 +135,20 @@ func getRooms() ([]tictacgo.Room, error) {
 	return rooms, err
 }
 
-//func CreateRoom(room string) {}
+func createRoom(room string) {
+	mess := tictacgo.Room{
+		Name: room,
+	}
+
+	buff := bytes.NewBuffer(make([]byte, 0))
+
+	err := json.NewEncoder(buff).Encode(mess)
+	if err != nil {
+		return
+	}
+
+	_, err = http.Post("http://127.0.0.1:8081/rooms", "application/json", buff)
+	if err != nil {
+		return
+	}
+}

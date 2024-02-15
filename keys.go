@@ -13,6 +13,7 @@ type roomKeyMap struct {
 	Up      key.Binding
 	Down    key.Binding
 	Refresh key.Binding
+	Create  key.Binding
 	Quit    key.Binding
 	Enter   key.Binding
 }
@@ -27,7 +28,7 @@ func (k menuKeyMap) ShortHelp() []key.Binding {
 }
 
 func (k roomKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Refresh, k.Enter, k.Quit}
+	return []key.Binding{k.Up, k.Down, k.Refresh, k.Create, k.Enter, k.Quit}
 }
 
 func (k gameKeyMap) ShortHelp() []key.Binding {
@@ -77,6 +78,10 @@ var roomKeys = roomKeyMap{
 	Refresh: key.NewBinding(
 		key.WithKeys("r"),
 		key.WithHelp("r", "refresh rooms"),
+	),
+	Create: key.NewBinding(
+		key.WithKeys("c"),
+		key.WithHelp("c", "create room"),
 	),
 	Enter: key.NewBinding(
 		key.WithKeys("enter"),

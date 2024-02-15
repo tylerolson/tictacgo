@@ -36,6 +36,11 @@ func newPlayer(mark string, connection net.Conn) player {
 		connection: connection,
 	}
 }
+func (s *server) removePlayerFromAll(addr string) {
+	for _, room := range s.rooms {
+		delete(room.players, addr)
+	}
+}
 
 //rooms
 
@@ -100,17 +105,17 @@ func (s *server) handleConnection(conn net.Conn) {
 	for {
 		var message tictacgo.Message
 
+		address := conn.RemoteAddr().String()
+
 		if err := json.NewDecoder(conn).Decode(&message); err != nil {
 			if err == io.EOF {
 				log.Info().Msg("Client disconnected")
+				s.removePlayerFromAll(address)
 				break
-				//todo remove client
 			} else {
 				log.Fatal().Err(err).Msg("Couldn't decode message")
 			}
 		}
-
-		address := conn.RemoteAddr().String()
 
 		log.Debug().
 			Str("Request", message.Request).
