@@ -60,31 +60,43 @@ func newRoomModel() *roomModel {
 	}
 }
 
-func UpdateTable(t *table.Model, rooms []tictacgo.Room) {
-	var rows []table.Row
+type updatedTable table.Model
 
-	for _, v := range rooms {
-		rows = append(rows, table.Row{v.Name, strconv.Itoa(v.Size)})
+func updateTable(t table.Model) tea.Cmd { //tea.Cmd
+	return func() tea.Msg {
+		rooms, err := getRooms()
+		if err != nil {
+			log.Println("Failed to update table")
+			return nil
+		}
+
+		var rows []table.Row
+
+		for _, v := range rooms {
+			rows = append(rows, table.Row{v.Name, strconv.Itoa(v.Size)})
+		}
+
+		t.SetRows(rows)
+
+		return updatedTable(t)
 	}
-
-	t.SetRows(rows)
 }
 
 func (m roomModel) Init() tea.Cmd {
-	UpdateTable(&m.table, GetRooms())
-	return nil
+	return updateTable(m.table)
 }
 
 func (m roomModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
+	case updatedTable:
+		m.table = table.Model(msg)
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, m.roomKeys.Quit):
 			return m, tea.Quit
 		case key.Matches(msg, m.roomKeys.Refresh):
-			UpdateTable(&m.table, GetRooms())
-			return m, nil
+			return m, updateTable(m.table)
 		case key.Matches(msg, m.roomKeys.Enter):
 			gm := newGameModel(m.table.SelectedRow()[0])
 			return gm, gm.Init()
@@ -105,10 +117,10 @@ func (m roomModel) View() string {
 	return lipgloss.NewStyle().Margin(2, 10).Render(s.String())
 }
 
-func GetRooms() []tictacgo.Room {
+func getRooms() ([]tictacgo.Room, error) {
 	res, err := http.Get("http://127.0.0.1:8081/rooms")
 	if err != nil {
-		log.Fatal(err, "Failed to get")
+		log.Println(err, "Failed to get")
 	}
 
 	var rooms []tictacgo.Room
@@ -118,7 +130,7 @@ func GetRooms() []tictacgo.Room {
 		log.Fatal("Couldn't decode response")
 	}
 
-	return rooms
+	return rooms, err
 }
 
 //func CreateRoom(room string) {}

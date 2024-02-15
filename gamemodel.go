@@ -50,12 +50,9 @@ func newGameModel(room string) *gameModel {
 		c := tictacgo.NewClient()
 		c.EstablishConnection("localhost:8080")
 		c.JoinRoom(room)
-
 		c.SetPlayer("X")
 
 		gm.client = c
-
-		receiveUpdate(c.GetUpdateChannel())
 	}
 
 	return &gm
