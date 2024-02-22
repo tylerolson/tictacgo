@@ -1,19 +1,21 @@
 package tictacgo
 
 const (
-	CreateRoom = "CreateRoom"
-	JoinRoom   = "JoinRoom"
-	GetRooms   = "GetRooms"
-	MakeMove   = "MakeMove"
-	Update     = "Update"
-	Success    = "Success"
-	Fail       = "Fail"
+	JoinRoom = "JoinRoom"
+	MakeMove = "MakeMove"
+	Update   = "Update"
+	Success  = "Success"
+	Fail     = "Fail"
 )
+
+type Room struct {
+	Name string `json:"name"`
+	Size int    `json:"size"`
+}
 
 type Message struct {
 	Request string   `json:"request"`
 	Room    string   `json:"room"`
-	Rooms   []string `json:"rooms"`
 	Player  string   `json:"player"`
 	Move    string   `json:"move"`
 	Turn    string   `json:"turn"`

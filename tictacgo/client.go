@@ -63,12 +63,23 @@ func (c *Client) receiveResponse() {
 			return
 		}
 
-		for i := 0; i < 9; i++ {
-			c.game.SetCell(i, response.Board[i])
+		if response.Board != nil {
+			for i := 0; i < 9; i++ {
+				c.game.SetCell(i, response.Board[i])
+			}
 		}
 
-		c.game.SetTurn(response.Turn)
-		c.game.SetWinner(response.Winner)
+		if response.Player != "" {
+			c.SetPlayer(response.Player)
+		}
+
+		if response.Turn != "" {
+			c.game.SetTurn(response.Turn)
+		}
+
+		if response.Winner != "" {
+			c.game.SetWinner(response.Winner)
+		}
 
 		c.updateChannel <- response
 
@@ -85,18 +96,6 @@ func (c *Client) MakeMove(move string) {
 	})
 	if err != nil {
 		log.Fatal("MakeMove failed to send", err)
-	}
-}
-
-func (c *Client) CreateRoom(room string) {
-	c.room = room
-
-	err := json.NewEncoder(c.conn).Encode(Message{
-		Request: CreateRoom,
-		Room:    room,
-	})
-	if err != nil {
-		log.Fatal("CreateRoom failed to send", err)
 	}
 }
 
