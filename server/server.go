@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -42,7 +43,7 @@ func (s *server) removePlayerFromAll(addr string) {
 	}
 }
 
-//rooms
+// rooms
 
 func (s *server) makeRoom(name string) {
 	g := tictacgo.NewGame()
@@ -56,10 +57,10 @@ func (s *server) makeRoom(name string) {
 	log.Info().Msg("Created room " + name)
 }
 
-//rest
+// rest
 
 func (s *server) getRoomsRoute(c *gin.Context) {
-	var rooms []tictacgo.Room
+	rooms := make([]tictacgo.Room, 0)
 
 	for _, v := range s.rooms {
 		room := tictacgo.Room{
@@ -81,7 +82,7 @@ func (s *server) makeRoomRoute(c *gin.Context) {
 		log.Fatal().Err(err).Msg("Failed to read POST")
 	}
 
-	log.Info().Str("name", newBody.Name)
+	log.Info().Str("name", newBody.Name).Send()
 
 	s.makeRoom(newBody.Name)
 
@@ -108,13 +109,12 @@ func (s *server) handleConnection(conn net.Conn) {
 		address := conn.RemoteAddr().String()
 
 		if err := json.NewDecoder(conn).Decode(&message); err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				log.Info().Msg("Client disconnected")
 				s.removePlayerFromAll(address)
 				break
-			} else {
-				log.Fatal().Err(err).Msg("Couldn't decode message")
 			}
+			log.Fatal().Err(err).Msg("Couldn't decode message")
 		}
 
 		log.Debug().
@@ -134,7 +134,7 @@ func (s *server) handleConnection(conn net.Conn) {
 				log.Warn().Msg("Room does not exist")
 				return
 			}
-			log.Debug().Str("ADDR", address)
+			log.Debug().Str("ADDR", address).Send()
 
 			mark := "X"
 
@@ -153,7 +153,7 @@ func (s *server) handleConnection(conn net.Conn) {
 			}
 			s.sendMessage(conn, mess)
 			s.broadcastUpdates(mess.Room)
-		case tictacgo.MakeMove: //MakeMove ROOM PLAYER MOVE
+		case tictacgo.MakeMove: // MakeMove ROOM PLAYER MOVE
 			room, ok := s.rooms[message.Room]
 			if !ok {
 				log.Warn().Msg("room '" + message.Room + "' does not exist")
