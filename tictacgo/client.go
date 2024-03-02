@@ -2,7 +2,7 @@ package tictacgo
 
 import (
 	"encoding/json"
-	"log"
+	"errors"
 	"net"
 	"time"
 )
@@ -13,6 +13,7 @@ type Client struct {
 	conn          net.Conn
 	game          *Game
 	updateChannel chan Response
+	errorChannel  chan error
 }
 
 func (c *Client) GetPlayer() string {
@@ -27,6 +28,10 @@ func (c *Client) GetUpdateChannel() chan Response {
 	return c.updateChannel
 }
 
+func (c *Client) GetErrorChannel() chan error {
+	return c.errorChannel
+}
+
 func (c *Client) SetPlayer(player string) {
 	c.player = player
 }
@@ -39,28 +44,31 @@ func NewClient() *Client {
 		player:        "",
 		game:          g,
 		updateChannel: make(chan Response),
+		errorChannel:  make(chan error),
 	}
 }
 
-func (c *Client) EstablishConnection(ip string) {
+func (c *Client) EstablishConnection(ip string) error {
 	conn, err := net.Dial("tcp", ip)
 	if err != nil {
-		log.Println(err)
+		return err
 	}
 
 	c.conn = conn
 
 	go c.receiveResponse()
+
+	return nil
 }
 
-func (c *Client) receiveResponse() {
+func (c *Client) receiveResponse() error {
 	for {
 		var response Response
 
 		decoder := json.NewDecoder(c.conn)
 		if err := decoder.Decode(&response); err != nil {
-			log.Println("Couldn't decode response", err)
-			return
+			c.errorChannel <- err
+
 		}
 
 		if response.Board != nil {
@@ -87,26 +95,24 @@ func (c *Client) receiveResponse() {
 	}
 }
 
-func (c *Client) MakeMove(move string) {
-	err := json.NewEncoder(c.conn).Encode(Message{
+func (c *Client) MakeMove(move string) error {
+	return json.NewEncoder(c.conn).Encode(Message{
 		Request: MakeMove,
 		Room:    c.room,
 		Player:  c.player,
 		Move:    move,
 	})
-	if err != nil {
-		log.Fatal("MakeMove failed to send", err)
-	}
 }
 
-func (c *Client) JoinRoom(room string) {
+func (c *Client) JoinRoom(room string) error {
+	if c.conn == nil {
+		return errors.New("JoinRoom() client connection is nil")
+	}
+
 	c.room = room
 
-	err := json.NewEncoder(c.conn).Encode(Message{
+	return json.NewEncoder(c.conn).Encode(Message{
 		Request: JoinRoom,
 		Room:    room,
 	})
-	if err != nil {
-		log.Fatal("JoinRoom failed to send", err)
-	}
 }

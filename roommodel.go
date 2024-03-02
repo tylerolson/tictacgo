@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,28 +10,28 @@ import (
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/tylerolson/tictacgo/tictacgo"
 )
 
 type roomModel struct {
-	table    table.Model
-	cursor   int
-	roomKeys roomKeyMap
+	table     table.Model
+	cursor    int
+	roomKeys  roomKeyMap
+	err       error
+	textInput textinput.Model
 }
 
 func newRoomModel() *roomModel {
 	columns := []table.Column{
-		{Title: "Name", Width: 10},
+		{Title: "Name", Width: 20},
 		{Title: "Players", Width: 10},
 	}
 
 	rows := []table.Row{
-		{"Test", "1/2"},
-		{"Test", "0/2"},
-		{"Test", "2/2"},
-		{"Test14134", "0/2"},
+		{"Rooms not avaliable", "?/2"},
 	}
 
 	t := table.New(
@@ -54,10 +53,16 @@ func newRoomModel() *roomModel {
 		Bold(false)
 	t.SetStyles(s)
 
+	textInput := textinput.New()
+	textInput.Blur()
+	textInput.Placeholder = "Enter room name"
+	textInput.Width = 50
+
 	return &roomModel{
-		table:    t,
-		cursor:   0,
-		roomKeys: roomKeys,
+		table:     t,
+		cursor:    0,
+		roomKeys:  roomKeys,
+		textInput: textInput,
 	}
 }
 
@@ -68,43 +73,68 @@ func (m roomModel) Init() tea.Cmd {
 func (m roomModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
+	case error:
+		m.err = msg
 	case table.Model:
 		m.table = msg
 	case tea.KeyMsg:
-		switch {
+		switch { // TODO add escape to cancel room create
 		case key.Matches(msg, m.roomKeys.Quit):
 			return m, tea.Quit
 		case key.Matches(msg, m.roomKeys.Refresh):
 			return m, updateTable(m.table)
 		case key.Matches(msg, m.roomKeys.Create):
-			createRoom("hello")
-			return m, updateTable(m.table)
+			m.table.Blur()
+			return m, m.textInput.Focus()
 		case key.Matches(msg, m.roomKeys.Enter):
-			gm := newGameModel(m.table.SelectedRow()[0])
-			return gm, gm.Init()
+			if m.textInput.Focused() {
+				m.err = createRoom(m.textInput.Value())
+				m.textInput.Blur()
+				m.textInput.Reset()
+				m.table.Focus()
+				return m, updateTable(m.table)
+			}
+			if !strings.Contains(m.table.SelectedRow()[1], "?") {
+				gm := newGameModel(m.table.SelectedRow()[0])
+				return gm, gm.Init()
+			}
+
 		}
 	}
 
-	m.table, cmd = m.table.Update(msg)
-	return m, cmd
+	var textCmd, tableCmd tea.Cmd
+	m.textInput, textCmd = m.textInput.Update(msg)
+	m.table, tableCmd = m.table.Update(msg)
+	return m, tea.Batch(cmd, textCmd, tableCmd)
 }
 
 func (m roomModel) View() string {
 	var s strings.Builder
 
-	s.WriteString("Rooms\n")
-	s.WriteString(m.table.View())
-	s.WriteString("\n" + help.New().View(m.roomKeys))
+	s.WriteString(" Rooms:\n\n")
+	s.WriteString(m.table.View() + "\n\n")
 
-	return lipgloss.NewStyle().Margin(2, 10).Render(s.String())
+	if m.textInput.Focused() {
+		s.WriteString(m.textInput.View() + "\n")
+	} else {
+		s.WriteString("\n")
+	}
+
+	s.WriteString("\n" + help.New().View(m.roomKeys) + "\n\n")
+
+	errorMsg := ""
+	if m.err != nil {
+		errorMsg = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true).Render(m.err.Error())
+	}
+
+	return lipgloss.NewStyle().Margin(2, 10).Render(s.String() + errorMsg)
 }
 
 func updateTable(t table.Model) tea.Cmd { //tea.Cmd
 	return func() tea.Msg {
 		rooms, err := getRooms()
 		if err != nil {
-			log.Println("Failed to update table")
-			return nil
+			return err
 		}
 
 		var rows []table.Row
@@ -120,22 +150,22 @@ func updateTable(t table.Model) tea.Cmd { //tea.Cmd
 }
 
 func getRooms() ([]tictacgo.Room, error) {
+	var rooms []tictacgo.Room
+
 	res, err := http.Get("http://127.0.0.1:8081/rooms")
 	if err != nil {
-		log.Println(err, "Failed to get")
+		return rooms, err
 	}
-
-	var rooms []tictacgo.Room
 
 	err = json.NewDecoder(res.Body).Decode(&rooms)
 	if err != nil {
-		log.Fatal("Couldn't decode response")
+		return rooms, err
 	}
 
 	return rooms, err
 }
 
-func createRoom(room string) {
+func createRoom(room string) error {
 	mess := tictacgo.Room{
 		Name: room,
 	}
@@ -144,11 +174,13 @@ func createRoom(room string) {
 
 	err := json.NewEncoder(buff).Encode(mess)
 	if err != nil {
-		return
+		return err
 	}
 
 	_, err = http.Post("http://127.0.0.1:8081/rooms", "application/json", buff)
 	if err != nil {
-		return
+		return err
 	}
+
+	return nil
 }

@@ -17,6 +17,7 @@ type gameModel struct {
 	gameKeys   gameKeyMap
 	room       string
 	client     *tictacgo.Client
+	err        error
 }
 
 func newGameModel(room string) *gameModel {
@@ -48,11 +49,13 @@ func newGameModel(room string) *gameModel {
 
 	if room != "" {
 		c := tictacgo.NewClient()
-		c.EstablishConnection("localhost:8080")
-		c.JoinRoom(room)
-		c.SetPlayer("X")
+		if gm.err = c.EstablishConnection("localhost:8080"); gm.err == nil {
+			c.JoinRoom(room)
+			c.SetPlayer("X")
 
-		gm.client = c
+			gm.client = c
+		}
+
 	}
 
 	return &gm
@@ -64,12 +67,22 @@ func receiveUpdate(channel chan tictacgo.Response) tea.Cmd {
 	}
 }
 
+func receiveError(channel chan error) tea.Cmd {
+	return func() tea.Msg {
+		return <-channel
+	}
+}
+
 func (gm gameModel) Init() tea.Cmd {
-	return receiveUpdate(gm.client.GetUpdateChannel())
+	upCmd := receiveUpdate(gm.client.GetUpdateChannel())
+	errCmd := receiveError(gm.client.GetErrorChannel())
+	return tea.Batch(upCmd, errCmd)
 }
 
 func (gm gameModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case error:
+		gm.err = msg
 	case tictacgo.Response:
 		g := gm.client.GetGame()
 		g.SetTurn(msg.Turn)
@@ -90,7 +103,7 @@ func (gm gameModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return newMenuModel(), nil
 		case key.Matches(msg, gm.gameKeys.Move):
 			if gm.room != "" {
-				gm.client.MakeMove(msg.String())
+				gm.err = gm.client.MakeMove(msg.String())
 				return gm, nil
 			}
 
@@ -119,7 +132,11 @@ func (gm gameModel) View() string {
 	}
 
 	if game.GetWinner() == "" {
-		s.WriteString("It is " + game.GetTurn() + "'s turn")
+		if game.GetTurn() == "" {
+			s.WriteString("Waiting for other player...")
+		} else {
+			s.WriteString("It is " + game.GetTurn() + "'s turn")
+		}
 	} else if game.GetWinner() == "tie" {
 		s.WriteString("It is a tie!")
 	} else {
@@ -130,7 +147,12 @@ func (gm gameModel) View() string {
 		s.WriteString("\nYou are " + gm.client.GetPlayer())
 	}
 
-	s.WriteString("\n\n\n" + help.New().View(gm.gameKeys))
+	s.WriteString("\n\n\n" + help.New().View(gm.gameKeys) + "\n\n")
 
-	return lipgloss.NewStyle().Margin(2, 10).Render(s.String())
+	errorMsg := ""
+	if gm.err != nil {
+		errorMsg = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render(gm.err.Error())
+	}
+
+	return lipgloss.NewStyle().Margin(2, 10).Render(s.String() + errorMsg)
 }

@@ -19,7 +19,8 @@ go run .
 
 ### TODO
 
-* Join random room button? Join first available room?
+* Move join information to a REST response not a TCP game response
+* ~~Create room with custom name~~
 * ~~Better server side cleanup after game is over~~
 * ~~Change create/join rooms to join to a lobby screen and wait for others~~
 

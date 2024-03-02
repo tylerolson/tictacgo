@@ -165,9 +165,11 @@ func (s *server) handleConnection(conn net.Conn) {
 				return
 			}
 
-			if room.game.GetTurn() == message.Player {
-				room.game.Move(message.Move)
-				log.Debug().Msg("Made move " + message.Move + "in room " + room.name)
+			if len(room.players) >= 2 { // setting this greater or equal for now, should be equal
+				if room.game.GetTurn() == message.Player {
+					room.game.Move(message.Move)
+					log.Debug().Msg("Made move " + message.Move + "in room " + room.name)
+				}
 			}
 
 			s.broadcastUpdates(message.Room)
