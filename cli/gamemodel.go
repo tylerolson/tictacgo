@@ -8,7 +8,8 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/tylerolson/tictacgo/tictacgo"
+	"github.com/tylerolson/tictacgo"
+	"github.com/tylerolson/tictacgo/server"
 )
 
 type gameModel struct {
@@ -16,7 +17,7 @@ type gameModel struct {
 	boardTable table.Model
 	gameKeys   gameKeyMap
 	room       string
-	client     *tictacgo.Client
+	client     *server.Client
 	err        error
 }
 
@@ -48,7 +49,7 @@ func newGameModel(room string) *gameModel {
 	}
 
 	if room != "" {
-		c := tictacgo.NewClient()
+		c := server.NewClient()
 		if gm.err = c.EstablishConnection("localhost:8080"); gm.err == nil {
 			c.JoinRoom(room)
 			c.SetPlayer("X")
@@ -61,7 +62,7 @@ func newGameModel(room string) *gameModel {
 	return &gm
 }
 
-func receiveUpdate(channel chan tictacgo.Response) tea.Cmd {
+func receiveUpdate(channel chan server.Response) tea.Cmd {
 	return func() tea.Msg {
 		return <-channel
 	}
@@ -83,19 +84,15 @@ func (gm gameModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case error:
 		gm.err = msg
-	case tictacgo.Response:
-		g := gm.client.GetGame()
-		g.SetTurn(msg.Turn)
-		g.SetWinner(msg.Winner)
-		if msg.Board != nil {
-			g.SetBoard(msg.Board) //possibly can be null
+	case server.Response:
+		switch msg.Type {
+		case server.UpdateGame:
 			r := gm.boardTable.Rows()
 			for i := 0; i < 9; i++ {
-				r[i/3][i%3] = gm.client.GetGame().GetBoard()[i]
+				r[i/3][i%3] = gm.client.Game.Board[i]
 			}
 			gm.boardTable.SetRows(r)
 		}
-
 		return gm, receiveUpdate(gm.client.GetUpdateChannel())
 	case tea.KeyMsg:
 		switch {
@@ -110,7 +107,7 @@ func (gm gameModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if gm.game.Move(msg.String()) {
 				r := gm.boardTable.Rows()
 				for i := 0; i < 9; i++ {
-					r[i/3][i%3] = gm.game.GetBoard()[i]
+					r[i/3][i%3] = gm.game.Board[i]
 				}
 				gm.boardTable.SetRows(r)
 				return gm, nil
@@ -128,19 +125,21 @@ func (gm gameModel) View() string {
 
 	game := gm.game
 	if gm.room != "" {
-		game = gm.client.GetGame()
+		game = gm.client.Game
+
+		if !gm.client.IsStarted() {
+			s.WriteString("Waiting for other player...\n")
+
+		}
 	}
 
-	if game.GetWinner() == "" {
-		if game.GetTurn() == "" {
-			s.WriteString("Waiting for other player...")
-		} else {
-			s.WriteString("It is " + game.GetTurn() + "'s turn")
-		}
-	} else if game.GetWinner() == "tie" {
+	if !game.HasWinner() {
+		s.WriteString("It is " + game.Turn + "'s turn")
+
+	} else if game.Winner == "tie" {
 		s.WriteString("It is a tie!")
 	} else {
-		s.WriteString(game.GetWinner() + " wins!")
+		s.WriteString(game.Winner + " wins!")
 	}
 
 	if gm.room != "" {

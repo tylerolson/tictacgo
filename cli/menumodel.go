@@ -42,13 +42,13 @@ func (m menuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor++
 			}
 		case key.Matches(msg, m.menuKeys.Enter):
-			if m.cursor == 0 { //local
+			if m.cursor == 0 { // local
 				gm := newGameModel("")
-				return gm, nil //return nil to not look at channel or whatever
-			} else if m.cursor == 1 { //create room
+				return gm, nil // return nil to not look at channel or whatever
+			} else if m.cursor == 1 { // create room
 				rm := newRoomModel()
 				return rm, rm.Init()
-			} else if m.cursor == 2 { //exit
+			} else if m.cursor == 2 { // exit
 				return m, tea.Quit
 			}
 		}

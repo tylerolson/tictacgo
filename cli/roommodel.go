@@ -13,7 +13,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/tylerolson/tictacgo/tictacgo"
+	"github.com/tylerolson/tictacgo/server"
 )
 
 type roomModel struct {
@@ -130,7 +130,7 @@ func (m roomModel) View() string {
 	return lipgloss.NewStyle().Margin(2, 10).Render(s.String() + errorMsg)
 }
 
-func updateTable(t table.Model) tea.Cmd { //tea.Cmd
+func updateTable(t table.Model) tea.Cmd { // tea.Cmd
 	return func() tea.Msg {
 		rooms, err := getRooms()
 		if err != nil {
@@ -149,30 +149,47 @@ func updateTable(t table.Model) tea.Cmd { //tea.Cmd
 	}
 }
 
-func getRooms() ([]tictacgo.Room, error) {
-	var rooms []tictacgo.Room
-
+func getRooms() ([]server.RoomResponse, error) {
 	res, err := http.Get("http://127.0.0.1:8081/rooms")
 	if err != nil {
-		return rooms, err
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	var rawContent json.RawMessage
+	response := server.Response{
+		Content: &rawContent,
 	}
 
-	err = json.NewDecoder(res.Body).Decode(&rooms)
+	err = json.NewDecoder(res.Body).Decode(&response)
 	if err != nil {
-		return rooms, err
+		return nil, err
 	}
 
-	return rooms, err
+	if response.Type == server.GetRoom {
+		var content []server.RoomResponse
+		err = json.Unmarshal(rawContent, &content)
+		if err != nil {
+			return nil, err
+		}
+
+		return content, err
+	}
+
+	return nil, err
 }
 
-func createRoom(room string) error {
-	mess := tictacgo.Room{
-		Name: room,
+func createRoom(roomName string) error {
+	request := server.Request{
+		Type: server.MakeRoom,
+		Content: server.RoomContent{
+			RoomName: roomName,
+		},
 	}
 
 	buff := bytes.NewBuffer(make([]byte, 0))
 
-	err := json.NewEncoder(buff).Encode(mess)
+	err := json.NewEncoder(buff).Encode(request)
 	if err != nil {
 		return err
 	}
