@@ -8,14 +8,12 @@ import (
 	"net/http"
 	"syscall"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/rs/zerolog/log"
 )
 
 type Server struct {
 	Rooms       map[string]*Room
-	restRouter  *chi.Mux
+	restRouter  *http.ServeMux
 	tcpListener net.Listener
 }
 
@@ -48,6 +46,7 @@ func (s *Server) GetRoom(name string) *Room {
 // rest
 
 func (s *Server) getRooms(w http.ResponseWriter, r *http.Request) {
+	log.Info().Msg("GET /rooms request")
 	rooms := make([]RoomResponse, 0)
 
 	for _, v := range s.Rooms {
@@ -70,6 +69,8 @@ func (s *Server) getRooms(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) postRooms(w http.ResponseWriter, r *http.Request) {
+	log.Info().Msg("POST /rooms request")
+
 	var rawContent json.RawMessage
 	request := Request{
 		Content: &rawContent,
@@ -77,14 +78,14 @@ func (s *Server) postRooms(w http.ResponseWriter, r *http.Request) {
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		log.Err(err).Msg("Failed to read JoinRoomRequest")
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	var content RoomContent
 	if err := json.Unmarshal(rawContent, &content); err != nil {
 		log.Err(err).Msg("Failed to unmarshall JoinRoomContent")
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
@@ -93,12 +94,13 @@ func (s *Server) postRooms(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) StartRESTServer() {
-	s.restRouter = chi.NewMux()
-	s.restRouter.Use(middleware.Logger)
-	s.restRouter.Get("/rooms", s.getRooms)
-	s.restRouter.Post("/rooms", s.postRooms)
-	err := http.ListenAndServe("localhost:8081", s.restRouter)
+	s.restRouter = http.NewServeMux()
+	s.restRouter.HandleFunc("GET /rooms", s.getRooms)
+	s.restRouter.HandleFunc("POST /rooms", s.postRooms)
+	err := http.ListenAndServe(":8081", s.restRouter)
+	log.Info().Msg("yo")
 	if err != nil {
+		log.Err(err).Msg("Failed to start REST server")
 		return
 	}
 }
