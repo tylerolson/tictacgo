@@ -9,7 +9,7 @@ type Room struct {
 	name    string
 	game    *tictacgo.Game
 	started bool
-	players map[string]*Player
+	players map[string]Player
 }
 
 func NewRoom(name string) *Room {
@@ -17,7 +17,7 @@ func NewRoom(name string) *Room {
 		name:    name,
 		game:    tictacgo.NewGame(),
 		started: false,
-		players: make(map[string]*Player),
+		players: make(map[string]Player),
 	}
 }
 

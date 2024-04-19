@@ -65,12 +65,13 @@ func receiveError(channel chan error) tea.Cmd {
 	}
 }
 
-func (gm gameModel) updateTable(board []string) {
+func (gm gameModel) getUpdatedTable(board []string) gameModel {
 	r := gm.boardTable.Rows()
 	for i := 0; i < 9; i++ {
 		r[i/3][i%3] = board[i]
 	}
 	gm.boardTable.SetRows(r)
+	return gm
 }
 
 func (gm gameModel) Init() tea.Cmd {
@@ -86,7 +87,7 @@ func (gm gameModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case server.Response:
 		switch msg.Type {
 		case server.UpdateGame:
-			gm.updateTable(gm.client.Game.Board)
+			gm = gm.getUpdatedTable(gm.client.Game.Board)
 		}
 		return gm, receiveUpdate(gm.client.GetUpdateChannel())
 	case tea.KeyMsg:
@@ -100,7 +101,7 @@ func (gm gameModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			if gm.game.Move(msg.String()) {
-				gm.updateTable(gm.game.Board)
+				gm = gm.getUpdatedTable(gm.game.Board)
 				return gm, nil
 			}
 		}
