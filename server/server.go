@@ -8,13 +8,14 @@ import (
 	"net/http"
 	"syscall"
 
-	"github.com/gin-gonic/gin"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/rs/zerolog/log"
 )
 
 type Server struct {
 	Rooms       map[string]*Room
-	restRouter  *gin.Engine
+	restRouter  *chi.Mux
 	tcpListener net.Listener
 }
 
@@ -46,7 +47,7 @@ func (s *Server) GetRoom(name string) *Room {
 
 // rest
 
-func (s *Server) getRooms(c *gin.Context) {
+func (s *Server) getRooms(w http.ResponseWriter, r *http.Request) {
 	rooms := make([]RoomResponse, 0)
 
 	for _, v := range s.Rooms {
@@ -62,36 +63,41 @@ func (s *Server) getRooms(c *gin.Context) {
 		Content: rooms,
 	}
 
-	c.IndentedJSON(http.StatusOK, response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 }
 
-func (s *Server) postRooms(c *gin.Context) {
+func (s *Server) postRooms(w http.ResponseWriter, r *http.Request) {
 	var rawContent json.RawMessage
 	request := Request{
 		Content: &rawContent,
 	}
 
-	if err := c.BindJSON(&request); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		log.Err(err).Msg("Failed to read JoinRoomRequest")
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	var content RoomContent
 	if err := json.Unmarshal(rawContent, &content); err != nil {
 		log.Err(err).Msg("Failed to unmarshall JoinRoomContent")
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	s.MakeRoom(content.Room)
-	c.IndentedJSON(http.StatusCreated, content.Room)
+	w.WriteHeader(http.StatusCreated)
 }
 
 func (s *Server) StartRESTServer() {
-	s.restRouter = gin.New()
-	s.restRouter.Use(gin.Logger())
-	s.restRouter.GET("/rooms", s.getRooms)
-	s.restRouter.POST("/rooms", s.postRooms)
-	err := s.restRouter.Run("localhost:8081")
+	s.restRouter = chi.NewMux()
+	s.restRouter.Use(middleware.Logger)
+	s.restRouter.Get("/rooms", s.getRooms)
+	s.restRouter.Post("/rooms", s.postRooms)
+	err := http.ListenAndServe("localhost:8081", s.restRouter)
 	if err != nil {
 		return
 	}
