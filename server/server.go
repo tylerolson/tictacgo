@@ -3,7 +3,6 @@ package server
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -11,20 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
-	tictacgo "github.com/tylerolson/tictacgo"
 )
-
-type player struct {
-	mark       string
-	connection net.Conn
-}
-
-type Room struct {
-	name    string
-	game    *tictacgo.Game
-	started bool
-	players map[string]player
-}
 
 type Server struct {
 	Rooms       map[string]*Room
@@ -32,45 +18,35 @@ type Server struct {
 	tcpListener net.Listener
 }
 
-func printRoom(room Room) {
-	log.Info().
-		Str("Name", room.name).
-		Interface("game", room.game).
-		Interface("Players", room.players).
-		Msg("Printed room")
-}
-
-func newPlayer(mark string, connection net.Conn) player {
-	return player{
-		mark:       mark,
-		connection: connection,
+func NewServer() *Server {
+	return &Server{
+		Rooms: make(map[string]*Room),
 	}
 }
-
 func (s *Server) removePlayerFromAll(addr string) {
 	for _, room := range s.Rooms {
 		delete(room.players, addr)
 	}
 }
 
-// rooms
-
 func (s *Server) MakeRoom(name string) {
-	g := tictacgo.NewGame()
-	r := Room{
-		name:    name,
-		game:    g,
-		started: false,
-		players: make(map[string]player),
-	}
-	s.Rooms[name] = &r
+	s.Rooms[name] = NewRoom(name)
 
-	log.Info().Msg("Created room " + name)
+	log.Info().Str("name", name).Msg("Created room")
+}
+
+func (s *Server) GetRoom(name string) *Room {
+	room, ok := s.Rooms[name]
+	if !ok {
+		log.Warn().Str("name", name).Msg("Room does not exist")
+		return nil
+	}
+	return room
 }
 
 // rest
 
-func (s *Server) getRoomsRoute(c *gin.Context) {
+func (s *Server) getRooms(c *gin.Context) {
 	rooms := make([]RoomResponse, 0)
 
 	for _, v := range s.Rooms {
@@ -89,35 +65,32 @@ func (s *Server) getRoomsRoute(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, response)
 }
 
-func (s *Server) makeRoomRoute(c *gin.Context) {
+func (s *Server) postRooms(c *gin.Context) {
 	var rawContent json.RawMessage
 	request := Request{
 		Content: &rawContent,
 	}
 
 	if err := c.BindJSON(&request); err != nil {
-		log.Fatal().Err(err).Msg("Failed to read POST")
-	}
-
-	var content RoomContent
-	err := json.Unmarshal(rawContent, &content)
-	if err != nil {
-		fmt.Println("Error unmarshalling JoinRoomContent:", err)
+		log.Err(err).Msg("Failed to read JoinRoomRequest")
 		return
 	}
 
-	log.Info().Str("name", content.RoomName).Send()
+	var content RoomContent
+	if err := json.Unmarshal(rawContent, &content); err != nil {
+		log.Err(err).Msg("Failed to unmarshall JoinRoomContent")
+		return
+	}
 
-	s.MakeRoom(content.RoomName)
-
-	c.IndentedJSON(http.StatusCreated, content.RoomName)
+	s.MakeRoom(content.Room)
+	c.IndentedJSON(http.StatusCreated, content.Room)
 }
 
 func (s *Server) StartRESTServer() {
 	s.restRouter = gin.New()
 	s.restRouter.Use(gin.Logger())
-	s.restRouter.GET("/rooms", s.getRoomsRoute)
-	s.restRouter.POST("/rooms", s.makeRoomRoute)
+	s.restRouter.GET("/rooms", s.getRooms)
+	s.restRouter.POST("/rooms", s.postRooms)
 	err := s.restRouter.Run("localhost:8081")
 	if err != nil {
 		return
@@ -129,38 +102,36 @@ func (s *Server) StartRESTServer() {
 func (s *Server) handleConnection(conn net.Conn) {
 	for {
 		var rawContent json.RawMessage
-
 		request := Request{
 			Content: &rawContent,
 		}
-		address := conn.RemoteAddr().String()
 
+		address := conn.RemoteAddr().String()
 		if err := json.NewDecoder(conn).Decode(&request); err != nil {
 			if errors.Is(err, io.EOF) || errors.Is(err, syscall.ECONNRESET) {
-				log.Info().Msg("Client disconnected")
+				log.Info().Str("address", address).Msg("Client disconnected")
 				s.removePlayerFromAll(address)
 				break
 			}
-			log.Fatal().Err(err).Msg("Couldn't decode request")
+			log.Err(err).Msg("Failed to read request")
+			return
 		}
 
-		log.Info().Msg("Got request of type " + string(request.Type))
+		log.Info().Str("type", string(request.Type)).Str("address", address).Msg("Got request")
 
 		switch request.Type {
 		case JoinRoom:
 			var content RoomContent
 			err := json.Unmarshal(rawContent, &content)
 			if err != nil {
-				fmt.Println("Error unmarshalling JoinRoomContent:", err)
+				log.Err(err).Msg("Failed to unmarshall JoinRoomContent")
 				return
 			}
 
-			room, ok := s.Rooms[content.RoomName]
-			if !ok {
-				log.Warn().Msg("Room does not exist")
+			room := s.GetRoom(content.Room)
+			if room == nil {
 				return
 			}
-			log.Debug().Str("ADDR", address).Send()
 
 			mark := "X"
 
@@ -168,43 +139,36 @@ func (s *Server) handleConnection(conn net.Conn) {
 				mark = "O"
 				room.started = true
 			} else if len(room.players) > 1 {
-				log.Info().Msg("Room full!")
+				log.Info().Str("name", content.Room).Msg("Room is full")
 				return
 			}
 
-			room.players[conn.RemoteAddr().String()] = newPlayer(mark, conn)
+			room.players[address] = NewPlayer(mark, conn)
 			responseContent := AssignMarkContent{
-				Room:   content.RoomName,
+				Room:   content.Room,
 				Player: mark,
 			}
-			s.sendMessage(conn, responseContent, AssignMark)
-			s.broadcastUpdates(content.RoomName)
+			s.sendMessage(conn, AssignMark, responseContent)
+			s.broadcastUpdates(content.Room)
+
+			log.Info().Str("address", address).Str("mark", mark).Str("room", content.Room).Msg("Player joined room")
 		case MakeMove:
 			var content MakeMoveContent
 			err := json.Unmarshal(rawContent, &content)
 			if err != nil {
-				log.Err(err).Msg("Error unmarshalling MakeMoveContent:")
+				log.Err(err).Msg("Failed to unmarshall MakeMoveContent")
 				return
 			}
 
-			room, ok := s.Rooms[content.Room]
-			if !ok {
-				log.Warn().Msg("room '" + content.Room + "' does not exist")
+			room := s.GetRoom(content.Room)
+			if room == nil {
 				return
 			}
-
-			if content.Player == "" {
-				log.Warn().Msg("Content Player does not exist")
-				return
-			}
-
-			log.Info().Interface("content", content.Room).Send()
-			printRoom(*room)
 
 			if len(room.players) >= 2 { // setting this greater or equal for now, should be equal
 				if room.game.Turn == content.Player {
 					room.game.Move(content.Move)
-					log.Debug().Msg("Made move " + content.Move + "in room " + room.name)
+					log.Info().Str("move", content.Move).Str("room", room.name).Msg("Made move")
 				}
 			}
 
@@ -213,7 +177,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 	}
 }
 
-func (s *Server) sendMessage(conn net.Conn, content any, responseType ResponseType) {
+func (s *Server) sendMessage(conn net.Conn, responseType ResponseType, content any) {
 	res := Response{
 		Type:    responseType,
 		Content: content,
@@ -222,26 +186,19 @@ func (s *Server) sendMessage(conn net.Conn, content any, responseType ResponseTy
 	encoder := json.NewEncoder(conn)
 	err := encoder.Encode(res)
 	if err != nil {
+		log.Err(err).Msg("Failed to encode message")
 		return
 	}
 }
 
-func (s *Server) broadcastUpdates(roomStr string) {
-	rooms := make([]string, len(s.Rooms))
-
-	i := 0
-	for k := range s.Rooms {
-		rooms[i] = k
-		i++
-	}
-
+func (s *Server) broadcastUpdates(roomName string) {
 	for _, room := range s.Rooms {
-		if room.name == roomStr {
+		if room.name == roomName {
 			for _, player := range room.players {
-				s.sendMessage(player.connection, UpdateGameContent{
+				s.sendMessage(player.connection, UpdateGame, UpdateGameContent{
 					Game:    *room.game,
 					Started: room.started,
-				}, UpdateGame)
+				})
 			}
 		}
 	}
@@ -250,7 +207,7 @@ func (s *Server) broadcastUpdates(roomStr string) {
 func (s *Server) StartTCPServer() {
 	var err error
 	if s.tcpListener, err = net.Listen("tcp", ":8080"); err != nil {
-		log.Error().Err(err).Msg("listener failed to start")
+		log.Error().Err(err).Msg("Failed to start listener")
 	}
 
 	defer func(listen net.Listener) {
@@ -259,29 +216,15 @@ func (s *Server) StartTCPServer() {
 		}
 	}(s.tcpListener)
 
-	log.Info().Msg("Start tcp server on port 8080")
+	log.Info().Msg("Started tcp server on port 8080")
 	func() {
 		for {
 			conn, err := s.tcpListener.Accept()
 			if err != nil {
-				log.Fatal().Err(err).Msg("failed to accepted connection")
+				log.Fatal().Err(err).Msg("Failed to accept connection")
 			}
 
 			go s.handleConnection(conn)
 		}
 	}()
 }
-
-// func main() {
-// 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-// 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
-
-// 	s := server{
-// 		rooms: make(map[string]*room),
-// 	}
-
-// 	s.makeRoom("test13")
-// 	s.makeRoom("yo")
-// 	go s.startTCPServer()
-// 	s.startRESTServer()
-// }

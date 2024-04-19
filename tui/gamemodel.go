@@ -22,24 +22,15 @@ type gameModel struct {
 }
 
 func newGameModel(room string) *gameModel {
-	columns := []table.Column{
-		{Title: "", Width: 3},
-		{Title: "", Width: 3},
-		{Title: "", Width: 3},
-	}
-	rows := []table.Row{
-		{"1", "2", "3"},
-		{"4", "5", "6"},
-		{"7", "8", "9"},
+	columns := []table.Column{{Title: "", Width: 1}, {Title: "", Width: 1}, {Title: "", Width: 1}}
+	rows := []table.Row{{"1", "2", "3"}, {"4", "5", "6"}, {"7", "8", "9"}}
+	styles := table.Styles{
+		Header:   lipgloss.NewStyle(),
+		Cell:     lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1).Align(lipgloss.Center, lipgloss.Center),
+		Selected: lipgloss.NewStyle(),
 	}
 
-	t := table.New(table.WithColumns(columns), table.WithRows(rows), table.WithHeight(10))
-
-	s := table.DefaultStyles()
-	s.Selected = lipgloss.NewStyle()
-	s.Header = lipgloss.NewStyle()
-	s.Cell = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).Bold(false).Align(lipgloss.Center, lipgloss.Center)
-	t.SetStyles(s)
+	t := table.New(table.WithColumns(columns), table.WithRows(rows), table.WithHeight(10), table.WithStyles(styles))
 
 	gm := gameModel{
 		game:       tictacgo.NewGame(),
@@ -52,7 +43,7 @@ func newGameModel(room string) *gameModel {
 		c := server.NewClient()
 		if gm.err = c.EstablishConnection("localhost:8080"); gm.err == nil {
 			c.JoinRoom(room)
-			c.SetPlayer("X")
+			c.Player = "X"
 
 			gm.client = c
 		}
@@ -74,6 +65,14 @@ func receiveError(channel chan error) tea.Cmd {
 	}
 }
 
+func (gm gameModel) updateTable(board []string) {
+	r := gm.boardTable.Rows()
+	for i := 0; i < 9; i++ {
+		r[i/3][i%3] = board[i]
+	}
+	gm.boardTable.SetRows(r)
+}
+
 func (gm gameModel) Init() tea.Cmd {
 	upCmd := receiveUpdate(gm.client.GetUpdateChannel())
 	errCmd := receiveError(gm.client.GetErrorChannel())
@@ -87,11 +86,7 @@ func (gm gameModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case server.Response:
 		switch msg.Type {
 		case server.UpdateGame:
-			r := gm.boardTable.Rows()
-			for i := 0; i < 9; i++ {
-				r[i/3][i%3] = gm.client.Game.Board[i]
-			}
-			gm.boardTable.SetRows(r)
+			gm.updateTable(gm.client.Game.Board)
 		}
 		return gm, receiveUpdate(gm.client.GetUpdateChannel())
 	case tea.KeyMsg:
@@ -105,11 +100,7 @@ func (gm gameModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			if gm.game.Move(msg.String()) {
-				r := gm.boardTable.Rows()
-				for i := 0; i < 9; i++ {
-					r[i/3][i%3] = gm.game.Board[i]
-				}
-				gm.boardTable.SetRows(r)
+				gm.updateTable(gm.game.Board)
 				return gm, nil
 			}
 		}
@@ -129,13 +120,11 @@ func (gm gameModel) View() string {
 
 		if !gm.client.IsStarted() {
 			s.WriteString("Waiting for other player...\n")
-
 		}
 	}
 
 	if !game.HasWinner() {
 		s.WriteString("It is " + game.Turn + "'s turn")
-
 	} else if game.Winner == "tie" {
 		s.WriteString("It is a tie!")
 	} else {
@@ -143,7 +132,7 @@ func (gm gameModel) View() string {
 	}
 
 	if gm.room != "" {
-		s.WriteString("\nYou are " + gm.client.GetPlayer())
+		s.WriteString("\nYou are " + gm.client.Player)
 	}
 
 	s.WriteString("\n\n\n" + help.New().View(gm.gameKeys) + "\n\n")

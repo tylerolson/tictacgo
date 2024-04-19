@@ -16,7 +16,7 @@ type Request struct {
 }
 
 type RoomContent struct {
-	RoomName string `json:"room"`
+	Room string `json:"room"`
 }
 
 type MakeMoveContent struct {

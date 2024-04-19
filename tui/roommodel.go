@@ -183,7 +183,7 @@ func createRoom(roomName string) error {
 	request := server.Request{
 		Type: server.MakeRoom,
 		Content: server.RoomContent{
-			RoomName: roomName,
+			Room: roomName,
 		},
 	}
 

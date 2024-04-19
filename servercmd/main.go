@@ -12,9 +12,7 @@ func main() {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 
-	s := server.Server{
-		Rooms: make(map[string]*server.Room),
-	}
+	s := server.NewServer()
 
 	s.MakeRoom("test13")
 	s.MakeRoom("yo")

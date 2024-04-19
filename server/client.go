@@ -10,17 +10,14 @@ import (
 )
 
 type Client struct {
-	room          string
-	player        string
+	Player string
+	Game   *tictacgo.Game
+
+	roomName      string
 	started       bool
 	conn          net.Conn
-	Game          *tictacgo.Game
 	updateChannel chan Response
 	errorChannel  chan error
-}
-
-func (c *Client) GetPlayer() string {
-	return c.player
 }
 
 func (c *Client) GetUpdateChannel() chan Response {
@@ -31,10 +28,6 @@ func (c *Client) GetErrorChannel() chan error {
 	return c.errorChannel
 }
 
-func (c *Client) SetPlayer(player string) {
-	c.player = player
-}
-
 func (c *Client) IsStarted() bool {
 	return c.started
 }
@@ -42,11 +35,11 @@ func (c *Client) IsStarted() bool {
 func NewClient() *Client {
 	g := tictacgo.NewGame()
 	return &Client{
-		room:          "",
-		conn:          nil,
-		player:        "",
-		started:       false,
+		Player:        "",
 		Game:          g,
+		roomName:      "",
+		started:       false,
+		conn:          nil,
 		updateChannel: make(chan Response),
 		errorChannel:  make(chan error),
 	}
@@ -68,13 +61,13 @@ func (c *Client) EstablishConnection(ip string) error {
 func (c *Client) receiveResponse() {
 	for {
 		var rawContent json.RawMessage
-
 		response := Response{
 			Content: &rawContent,
 		}
 
 		if err := json.NewDecoder(c.conn).Decode(&response); err != nil {
 			c.errorChannel <- err
+			return
 		}
 
 		switch response.Type {
@@ -86,7 +79,7 @@ func (c *Client) receiveResponse() {
 				return
 			}
 
-			c.SetPlayer(content.Player)
+			c.Player = content.Player
 		case UpdateGame:
 			var content UpdateGameContent
 
@@ -94,8 +87,8 @@ func (c *Client) receiveResponse() {
 				c.errorChannel <- err
 				return
 			}
-			c.started = content.Started
 
+			c.started = content.Started
 			c.Game.SetGame(content.Game)
 		}
 
@@ -109,8 +102,8 @@ func (c *Client) MakeMove(move string) error {
 	return json.NewEncoder(c.conn).Encode(Request{
 		Type: MakeMove,
 		Content: MakeMoveContent{
-			Room:   c.room,
-			Player: c.player,
+			Room:   c.roomName,
+			Player: c.Player,
 			Move:   move,
 		},
 	})
@@ -121,12 +114,12 @@ func (c *Client) JoinRoom(roomName string) error {
 		return errors.New("JoinRoom() client connection is nil")
 	}
 
-	c.room = roomName
+	c.roomName = roomName
 
 	return json.NewEncoder(c.conn).Encode(Request{
 		Type: JoinRoom,
 		Content: RoomContent{
-			RoomName: roomName,
+			Room: roomName,
 		},
 	})
 }
