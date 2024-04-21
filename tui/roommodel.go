@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -24,7 +25,7 @@ type roomModel struct {
 	textInput textinput.Model
 }
 
-func newRoomModel() *roomModel {
+func newRoomModel() roomModel {
 	columns := []table.Column{
 		{Title: "Name", Width: 20},
 		{Title: "Players", Width: 10},
@@ -58,7 +59,7 @@ func newRoomModel() *roomModel {
 	textInput.Placeholder = "Enter room name"
 	textInput.Width = 50
 
-	return &roomModel{
+	return roomModel{
 		table:     t,
 		cursor:    0,
 		roomKeys:  roomKeys,
@@ -124,7 +125,7 @@ func (m roomModel) View() string {
 
 	errorMsg := ""
 	if m.err != nil {
-		errorMsg = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true).Render(m.err.Error())
+		errorMsg = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render(fmt.Sprintf("%+v", m.err))
 	}
 
 	return lipgloss.NewStyle().Margin(2, 10).Render(s.String() + errorMsg)
@@ -152,7 +153,7 @@ func updateTable(t table.Model) tea.Cmd { // tea.Cmd
 func getRooms() ([]server.RoomResponse, error) {
 	res, err := http.Get("http://127.0.0.1:8081/rooms")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("REST server is not running\n%w", err)
 	}
 	defer res.Body.Close()
 
@@ -161,16 +162,15 @@ func getRooms() ([]server.RoomResponse, error) {
 		Content: &rawContent,
 	}
 
-	err = json.NewDecoder(res.Body).Decode(&response)
-	if err != nil {
-		return nil, err
+	if err = json.NewDecoder(res.Body).Decode(&response); err != nil {
+		return nil, fmt.Errorf("failed to decode REST response\n%w", err)
 	}
 
 	if response.Type == server.GetRoom {
 		var content []server.RoomResponse
-		err = json.Unmarshal(rawContent, &content)
-		if err != nil {
-			return nil, err
+
+		if err = json.Unmarshal(rawContent, &content); err != nil {
+			return nil, fmt.Errorf("failed to unmarshall REST RoomResponse\n%w", err)
 		}
 
 		return content, err
@@ -189,14 +189,12 @@ func createRoom(roomName string) error {
 
 	buff := bytes.NewBuffer(make([]byte, 0))
 
-	err := json.NewEncoder(buff).Encode(request)
-	if err != nil {
-		return err
+	if err := json.NewEncoder(buff).Encode(request); err != nil {
+		return fmt.Errorf("failed to encode REST request\n%w", err)
 	}
 
-	_, err = http.Post("http://127.0.0.1:8081/rooms", "application/json", buff)
-	if err != nil {
-		return err
+	if _, err := http.Post("http://127.0.0.1:8081/rooms", "application/json", buff); err != nil {
+		return fmt.Errorf("failed to POST CreateRoom\n%w", err)
 	}
 
 	return nil

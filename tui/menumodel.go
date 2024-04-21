@@ -15,8 +15,8 @@ type menuModel struct {
 	menuKeys menuKeyMap
 }
 
-func newMenuModel() *menuModel {
-	return &menuModel{
+func newMenuModel() menuModel {
+	return menuModel{
 		choices:  []string{"Start Solo", "Multiplayer", "Exit"},
 		cursor:   0,
 		menuKeys: menuKeys,

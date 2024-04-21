@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/help"
@@ -21,7 +22,7 @@ type gameModel struct {
 	err        error
 }
 
-func newGameModel(room string) *gameModel {
+func newGameModel(room string) gameModel {
 	columns := []table.Column{{Title: "", Width: 1}, {Title: "", Width: 1}, {Title: "", Width: 1}}
 	rows := []table.Row{{"1", "2", "3"}, {"4", "5", "6"}, {"7", "8", "9"}}
 	styles := table.Styles{
@@ -50,7 +51,7 @@ func newGameModel(room string) *gameModel {
 
 	}
 
-	return &gm
+	return gm
 }
 
 func receiveUpdate(channel chan server.Response) tea.Cmd {
@@ -93,7 +94,13 @@ func (gm gameModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, gm.gameKeys.Quit):
-			return newMenuModel(), nil
+			if gm.room == "" {
+				return newMenuModel(), nil
+			} else {
+				gm.client.CloseConnection()
+				rm := newRoomModel()
+				return rm, rm.Init()
+			}
 		case key.Matches(msg, gm.gameKeys.Move):
 			if gm.room != "" {
 				gm.err = gm.client.MakeMove(msg.String())
@@ -140,7 +147,7 @@ func (gm gameModel) View() string {
 
 	errorMsg := ""
 	if gm.err != nil {
-		errorMsg = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render(gm.err.Error())
+		errorMsg = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render(fmt.Sprintf("%+v", gm.err))
 	}
 
 	return lipgloss.NewStyle().Margin(2, 10).Render(s.String() + errorMsg)

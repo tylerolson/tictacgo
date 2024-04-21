@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"time"
 
@@ -48,14 +49,17 @@ func NewClient() *Client {
 func (c *Client) EstablishConnection(ip string) error {
 	conn, err := net.Dial("tcp", ip)
 	if err != nil {
-		return err
+		return fmt.Errorf("couldn't dial tcp\n%w", err)
 	}
 
 	c.conn = conn
 
 	go c.receiveResponse()
-
 	return nil
+}
+
+func (c *Client) CloseConnection() {
+	c.conn.Close()
 }
 
 func (c *Client) receiveResponse() {
@@ -66,7 +70,11 @@ func (c *Client) receiveResponse() {
 		}
 
 		if err := json.NewDecoder(c.conn).Decode(&response); err != nil {
-			c.errorChannel <- err
+			if errors.Is(err, net.ErrClosed) {
+				return
+			}
+
+			c.errorChannel <- fmt.Errorf("err decoding response\n%w", err)
 			return
 		}
 
@@ -75,7 +83,7 @@ func (c *Client) receiveResponse() {
 			var content AssignMarkContent
 
 			if err := json.Unmarshal(rawContent, &content); err != nil {
-				c.errorChannel <- err
+				c.errorChannel <- fmt.Errorf("err unmarshalling AssignMarkContent\n%w", err)
 				return
 			}
 
@@ -84,7 +92,7 @@ func (c *Client) receiveResponse() {
 			var content UpdateGameContent
 
 			if err := json.Unmarshal(rawContent, &content); err != nil {
-				c.errorChannel <- err
+				c.errorChannel <- fmt.Errorf("err unmarshalling UpdateGameContent\n%w", err)
 				return
 			}
 
@@ -99,7 +107,7 @@ func (c *Client) receiveResponse() {
 }
 
 func (c *Client) MakeMove(move string) error {
-	return json.NewEncoder(c.conn).Encode(Request{
+	err := json.NewEncoder(c.conn).Encode(Request{
 		Type: MakeMove,
 		Content: MakeMoveContent{
 			Room:   c.roomName,
@@ -107,6 +115,11 @@ func (c *Client) MakeMove(move string) error {
 			Move:   move,
 		},
 	})
+	if err != nil {
+		return fmt.Errorf("err sending MakeMove\n%w", err)
+	}
+
+	return nil
 }
 
 func (c *Client) JoinRoom(roomName string) error {
@@ -116,10 +129,16 @@ func (c *Client) JoinRoom(roomName string) error {
 
 	c.roomName = roomName
 
-	return json.NewEncoder(c.conn).Encode(Request{
+	err := json.NewEncoder(c.conn).Encode(Request{
 		Type: JoinRoom,
 		Content: RoomContent{
 			Room: roomName,
 		},
 	})
+
+	if err != nil {
+		return fmt.Errorf("err sending JoinRoom\n%w", err)
+	}
+
+	return nil
 }
