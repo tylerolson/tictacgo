@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"syscall"
+	"time"
 
 	"github.com/rs/zerolog/log"
 )
@@ -157,6 +158,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 				Player: mark,
 			}
 			s.sendMessage(conn, AssignMark, responseContent)
+			time.Sleep(150)
 			s.broadcastUpdates(content.Room)
 
 			log.Info().Str("address", address).Str("mark", mark).Str("room", content.Room).Msg("Player joined room")
